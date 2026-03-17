@@ -1,1 +1,1 @@
-Customized BatterySMartflow Integration
+Customized BatterySmartflow Integration
