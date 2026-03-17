@@ -22,7 +22,14 @@
           "grid_export_entity": "Netzeinspeisung (Split)",
           "ac_mode_entity": "Zendure AC-Modus",
           "input_limit_entity": "Zendure Ladeleistung",
-          "output_limit_entity": "Zendure Entladeleistung"
+          "output_limit_entity": "Zendure Entladeleistung",
+          "pv_forecast_entity": "PV-Prognose Sensor (optional)",
+          "additional_battery_soc_entity": "Zweite Batterie SoC Sensor (optional)",
+          "additional_battery_capacity_kwh": "Zweite Batterie Kapazität (kWh)",
+          "additional_battery_mode_entity": "Zweite Batterie Modus input_select (optional)",
+          "additional_battery_power_entity": "Zweite Batterie Leistung input_number (optional)",
+          "additional_battery_charge_mode": "Lademodus-String (z. B. 'Akku schnell laden')",
+          "additional_battery_stop_mode": "Stopmodus-String (z. B. 'Akku automatisch')"
         },
         "data_description": {
           "device_profile": "Wähle das passende Geräteprofil für dein Zendure-System. Das Profil enthält abgestimmte Regelparameter.",
@@ -94,7 +101,14 @@
           "grid_export_entity": "Netzeinspeisung (Split)",
           "ac_mode_entity": "Zendure AC-Modus",
           "input_limit_entity": "Zendure Ladeleistung",
-          "output_limit_entity": "Zendure Entladeleistung"
+          "output_limit_entity": "Zendure Entladeleistung",
+          "pv_forecast_entity": "PV-Prognose Sensor (optional)",
+          "additional_battery_soc_entity": "Zweite Batterie SoC Sensor (optional)",
+          "additional_battery_capacity_kwh": "Zweite Batterie Kapazität (kWh)",
+          "additional_battery_mode_entity": "Zweite Batterie Modus input_select (optional)",
+          "additional_battery_power_entity": "Zweite Batterie Leistung input_number (optional)",
+          "additional_battery_charge_mode": "Lademodus-String (z. B. 'Akku schnell laden')",
+          "additional_battery_stop_mode": "Stopmodus-String (z. B. 'Akku automatisch')"
         },
         "data_description": {
           "device_profile": "Wähle das passende Geräteprofil für dein Zendure-System. Die Regelparameter werden automatisch angepasst.",
@@ -165,47 +179,29 @@
         "state": {
           "standby": "Standby",
           "charge": "Laden",
-          "discharge": "Entladen"
+          "discharge": "Entladen",
+          "constant_discharge": "Konstante Entladung"
         }
       }
     },
     "number": {
-      "battery_packs": {
-        "name": "Anzahl Akku-Packs"
-      },
-      "soc_min": {
-        "name": "SoC Minimum"
-      },
-      "soc_max": {
-        "name": "SoC Maximum"
-      },
-      "max_charge": {
-        "name": "Max. Ladeleistung"
-      },
-      "max_discharge": {
-        "name": "Max. Entladeleistung"
-      },
-      "emergency_charge": {
-        "name": "Notladeleistung"
-      },
-      "emergency_soc": {
-        "name": "Notladung ab SoC"
-      },
-      "very_expensive_threshold": {
-        "name": "Sehr-teuer-Schwelle"
-      },
-      "profit_margin_pct": {
-        "name": "Gewinnmarge (%)"
-      },
-      "peak_factor": {
-        "name": "Peak-Faktor"
-      },
-      "valley_factor": {
-        "name": "Tal-Faktor"
-      },
-      "very_cheap_price": {
-        "name": "Sehr-billig Schwelle"
-      }
+      "battery_packs": { "name": "Anzahl Akku-Packs" },
+      "soc_min": { "name": "SoC Minimum" },
+      "soc_max": { "name": "SoC Maximum" },
+      "max_charge": { "name": "Max. Ladeleistung" },
+      "max_discharge": { "name": "Max. Entladeleistung" },
+      "emergency_charge": { "name": "Notladeleistung" },
+      "emergency_soc": { "name": "Notladung ab SoC" },
+      "very_expensive_threshold": { "name": "Sehr-teuer-Schwelle" },
+      "profit_margin_pct": { "name": "Gewinnmarge (%)" },
+      "peak_factor": { "name": "Peak-Faktor" },
+      "valley_factor": { "name": "Tal-Faktor" },
+      "very_cheap_price": { "name": "Sehr-günstig-Schwelle (€/kWh)" },
+      "daytime_consumption_w": { "name": "Tagesverbrauch (W)" },
+      "nighttime_consumption_w": { "name": "Nachtverbrauch (W)" }
+    },
+    "switch": {
+      "pv_forecast_enabled": { "name": "PV-Nachtladung" }
     },
     "sensor": {
       "device_profile": {
@@ -299,8 +295,6 @@
           "expensive_discharge": "Entladen wegen hohem Strompreis",
           "very_expensive_force_discharge": "Zwangsentladung wegen extremer Preisspitze",
           "emergency_latched_charge": "Notladung aktiv (verriegelt)",
-          "summer_cover_deficit": "Sommer: Hauslast decken",
-          "pv_surplus_charge": "PV-Überschuss laden",
           "soc_min_enforced": "Entladung gestoppt (SoC-Minimum erreicht)",
           "soc_limit_upper": "Laden blockiert (oberes SoC-Limit aktiv)",
           "soc_limit_lower": "Entladen blockiert (unteres SoC-Limit aktiv)",
@@ -308,12 +302,14 @@
           "manual_standby": "Manueller Standby",
           "manual_charge": "Manuelles Laden",
           "manual_discharge": "Manuelles Entladen",
+          "manual_constant_discharge": "Konstante Entladung aktiv",
           "manual_idle": "Manuelle Bereitschaft",
           "idle": "Bereit",
           "adaptive_peak_discharge": "Entladen wegen Preisspitze",
+          "pv_surplus_charge": "Laden (PV-Überschuss)",
           "price_based_discharge": "Preisbasierte Entladung",
-          "valley_boost_charge": "Preis-Tal erkannt. Maximalladung",
-          "additional_battery_charging_block": "Zusatzakku lädt: Entladung blockiert"
+          "valley_boost_charge": "Laden (Günstiger Nachtstrom)",
+          "night_charge_go_window": "Nachtladung: GO-Fenster aktiv"
         }
       },
       "next_planned_action": {
@@ -356,7 +352,23 @@
       },
       "profit_eur": {
         "name": "Ersparnis / Gewinn (gesamt)"
-      }
+      },
+      "night_charge_status": {
+        "name": "Nachtladung Status",
+        "state": {
+          "charging": "Aktiv – BYD lädt",
+          "goal_reached": "Ziel erreicht",
+          "no_need": "Kein Ladebedarf",
+          "discharge_paused": "Entladung pausiert",
+          "inactive": "Inaktiv"
+        }
+      },
+      "night_charge_pv_kwh": { "name": "Nachtladung PV-Prognose" },
+      "night_charge_byd_target_soc": { "name": "Nachtladung BYD Ziel-SoC" },
+      "night_charge_byd_kwh": { "name": "Nachtladung BYD Ladung" },
+      "night_charge_zendure_target_soc": { "name": "Nachtladung Zendure Ziel-SoC" },
+      "night_charge_zendure_kwh": { "name": "Nachtladung Zendure Ladung" },
+      "total_available_kwh": { "name": "Verfügbare Energie (Gesamt)" }
     }
   }
 }

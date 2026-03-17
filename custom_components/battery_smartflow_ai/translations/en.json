@@ -22,7 +22,14 @@
           "grid_export_entity": "Grid export (split)",
           "ac_mode_entity": "Zendure AC mode",
           "input_limit_entity": "Zendure charging power",
-          "output_limit_entity": "Zendure discharging power"
+          "output_limit_entity": "Zendure discharging power",
+          "pv_forecast_entity": "PV forecast sensor (optional)",
+          "additional_battery_soc_entity": "Second battery SoC sensor (optional)",
+          "additional_battery_capacity_kwh": "Second battery capacity (kWh)",
+          "additional_battery_mode_entity": "Second battery mode input_select (optional)",
+          "additional_battery_power_entity": "Second battery power input_number (optional)",
+          "additional_battery_charge_mode": "Charge mode string (e.g. 'Fast charge battery')",
+          "additional_battery_stop_mode": "Stop mode string (e.g. 'Battery automatic')"
         },
         "data_description": {
           "device_profile": "Select the appropriate device profile for your Zendure system. The profile contains tuned control parameters.",
@@ -94,7 +101,14 @@
           "grid_export_entity": "Grid export (split)",
           "ac_mode_entity": "Zendure AC mode",
           "input_limit_entity": "Zendure charging power",
-          "output_limit_entity": "Zendure discharging power"
+          "output_limit_entity": "Zendure discharging power",
+          "pv_forecast_entity": "PV forecast sensor (optional)",
+          "additional_battery_soc_entity": "Second battery SoC sensor (optional)",
+          "additional_battery_capacity_kwh": "Second battery capacity (kWh)",
+          "additional_battery_mode_entity": "Second battery mode input_select (optional)",
+          "additional_battery_power_entity": "Second battery power input_number (optional)",
+          "additional_battery_charge_mode": "Charge mode string (e.g. 'Fast charge battery')",
+          "additional_battery_stop_mode": "Stop mode string (e.g. 'Battery automatic')"
         },
         "data_description": {
           "device_profile": "Select the appropriate device profile for your Zendure system. Control parameters are adjusted automatically.",
@@ -165,47 +179,29 @@
         "state": {
           "standby": "Standby",
           "charge": "Charge",
-          "discharge": "Discharge"
+          "discharge": "Discharge",
+          "constant_discharge": "Constant discharge"
         }
       }
     },
     "number": {
-      "battery_packs": {
-        "name": "Number of battery packs"
-      },
-      "soc_min": {
-        "name": "Minimum SoC"
-      },
-      "soc_max": {
-        "name": "Maximum SoC"
-      },
-      "max_charge": {
-        "name": "Max. charging power"
-      },
-      "max_discharge": {
-        "name": "Max. discharging power"
-      },
-      "emergency_charge": {
-        "name": "Emergency charging power"
-      },
-      "emergency_soc": {
-        "name": "Emergency charge below SoC"
-      },
-      "very_expensive_threshold": {
-        "name": "Very expensive threshold"
-      },
-      "profit_margin_pct": {
-        "name": "Profit margin (%)"
-      },
-      "peak_factor": {
-        "name": "Peak factor"
-      },
-      "valley_factor": {
-        "name": "Valley factor"
-      },
-      "very_cheap_price": {
-        "name": "Very cheap threshold"
-      }
+      "battery_packs": { "name": "Number of battery packs" },
+      "soc_min": { "name": "Minimum SoC" },
+      "soc_max": { "name": "Maximum SoC" },
+      "max_charge": { "name": "Max. charging power" },
+      "max_discharge": { "name": "Max. discharging power" },
+      "emergency_charge": { "name": "Emergency charging power" },
+      "emergency_soc": { "name": "Emergency charge below SoC" },
+      "very_expensive_threshold": { "name": "Very expensive threshold" },
+      "profit_margin_pct": { "name": "Profit margin (%)" },
+      "peak_factor": { "name": "Peak factor" },
+      "valley_factor": { "name": "Valley factor" },
+      "very_cheap_price": { "name": "Very cheap price threshold (€/kWh)" },
+      "daytime_consumption_w": { "name": "Daytime consumption (W)" },
+      "nighttime_consumption_w": { "name": "Nighttime consumption (W)" }
+    },
+    "switch": {
+      "pv_forecast_enabled": { "name": "PV night charging" }
     },
     "sensor": {
       "device_profile": {
@@ -299,8 +295,6 @@
           "expensive_discharge": "Discharging due to high electricity price",
           "very_expensive_force_discharge": "Forced discharge due to extreme price spike",
           "emergency_latched_charge": "Emergency charging active (latched)",
-          "summer_cover_deficit": "Summer: cover house load",
-          "pv_surplus_charge": "Charge from PV surplus",
           "soc_min_enforced": "Discharge stopped (minimum SoC reached)",
           "soc_limit_upper": "Charging blocked (upper SoC limit active)",
           "soc_limit_lower": "Discharging blocked (lower SoC limit active)",
@@ -308,12 +302,14 @@
           "manual_standby": "Manual standby",
           "manual_charge": "Manual charging",
           "manual_discharge": "Manual discharging",
+          "manual_constant_discharge": "Constant discharge active",
           "manual_idle": "Manual standby",
           "idle": "Ready",
           "adaptive_peak_discharge": "Discharging due to price peak",
+          "pv_surplus_charge": "Charge from PV surplus",
           "price_based_discharge": "Price-based discharge",
-          "valley_boost_charge": "Price valley detected. Maximum charge",
-          "additional_battery_charging_block": "Additional battery charging: discharge blocked"
+          "valley_boost_charge": "Charging (cheap off-peak power)",
+          "night_charge_go_window": "Night charging: GO window active"
         }
       },
       "next_planned_action": {
@@ -356,7 +352,23 @@
       },
       "profit_eur": {
         "name": "Savings / profit (total)"
-      }
+      },
+      "night_charge_status": {
+        "name": "Night charge status",
+        "state": {
+          "charging": "Active – BYD charging",
+          "goal_reached": "Goal reached",
+          "no_need": "No charge needed",
+          "discharge_paused": "Discharge paused",
+          "inactive": "Inactive"
+        }
+      },
+      "night_charge_pv_kwh": { "name": "Night charge PV forecast" },
+      "night_charge_byd_target_soc": { "name": "Night charge BYD target SoC" },
+      "night_charge_byd_kwh": { "name": "Night charge BYD energy" },
+      "night_charge_zendure_target_soc": { "name": "Night charge Zendure target SoC" },
+      "night_charge_zendure_kwh": { "name": "Night charge Zendure energy" },
+      "total_available_kwh": { "name": "Total available energy" }
     }
   }
 }
