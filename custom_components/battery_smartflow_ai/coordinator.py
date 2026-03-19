@@ -872,9 +872,13 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.runtime_settings.get(SETTING_NIGHTTIME_CONSUMPTION_W, DEFAULT_NIGHTTIME_CONSUMPTION_W)
             )
             # Abgeleitete kWh-Werte aus den W-Einstellungen
+            # Zeiteinteilung: 00–05 Nacht (5h) | 05–08 Brücke (3h) | 08–18 Tag (10h) | 18–24 Nacht (6h)
             pv_self_consumption_kwh = daytime_consumption_w / 1000.0 * 10.0   # 08–18 Uhr = 10h
-            bridge_kwh              = nighttime_consumption_w / 1000.0 * 3.0   # 05–08 Uhr = 3h
-            daily_consumption_kwh   = (nighttime_consumption_w / 1000.0 * 14.0
+            bridge_kwh              = nighttime_consumption_w / 1000.0 * 3.0   # 05–08 Uhr = 3h (separat!)
+            # daily_consumption_kwh = Nacht (11h: 00–05 + 18–24) + Brücke (3h) + Tag (10h)
+            # = nighttime * 11h + daytime * 10h + bridge_kwh → bridge getrennt übergeben,
+            # daher hier nur 11h Nacht + 10h Tag (bridge wird in target_total separat addiert)
+            daily_consumption_kwh   = (nighttime_consumption_w / 1000.0 * 11.0
                                        + daytime_consumption_w / 1000.0 * 10.0)
 
             # --- Daily price average ---
@@ -1400,29 +1404,32 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._persist["night_plan"] = night_plan
 
         if night_status == "charging":
-            # Laden starten/fortsetzen
+            # Ladeleistung jede Runde neu berechnen (schrumpfende Restzeit berücksichtigen)
+            remaining_h = max(0.25, 5.0 - now.hour - now.minute / 60.0)
+            byd_power = int(
+                min(3600, max(500, round(byd_charge / remaining_h * 10) * 100))
+            )
+            night_plan["byd_leistung_w"] = byd_power
+            self._persist["night_plan"] = night_plan
+
             if current_mode != self._byd_charge_mode:
-                remaining_h = max(0.25, 5.0 - now.hour - now.minute / 60.0)
-                byd_power = int(
-                    min(3600, max(500, round(byd_charge / remaining_h * 1000 / 100) * 100))
-                )
-                night_plan["byd_leistung_w"] = byd_power  # Beim Start setzen
-                self._persist["night_plan"] = night_plan
+                # Ersten Übergang → Modus setzen + Leistung schreiben + loggen
                 _LOGGER.info(
                     "SmartFlow Nachtladen: BYD %.1fkWh laden → Ziel %.0f%%, %dW (%s bleibt)",
                     byd_charge, byd_target_soc, byd_power,
                     f"{remaining_h:.1f}h",
                 )
-                if self.entities.additional_battery_power:
-                    await self.hass.services.async_call(
-                        "input_number",
-                        "set_value",
-                        {
-                            "entity_id": self.entities.additional_battery_power,
-                            "value": byd_power,
-                        },
-                    )
                 await self._byd_set_mode(self._byd_charge_mode)
+
+            if self.entities.additional_battery_power:
+                await self.hass.services.async_call(
+                    "input_number",
+                    "set_value",
+                    {
+                        "entity_id": self.entities.additional_battery_power,
+                        "value": byd_power,
+                    },
+                )
             self._byd_night_active = True
 
     async def _byd_set_mode(self, mode: str) -> None:

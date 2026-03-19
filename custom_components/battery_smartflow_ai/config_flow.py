@@ -96,6 +96,18 @@ class ZendureSmartFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not self._user_input.get(CONF_WALLBOX_POWER_ENTITY):
                 self._user_input.pop(CONF_WALLBOX_POWER_ENTITY, None)
 
+            if not self._user_input.get(CONF_PV_FORECAST_ENTITY):
+                self._user_input.pop(CONF_PV_FORECAST_ENTITY, None)
+
+            if not self._user_input.get(CONF_ADDITIONAL_BATTERY_SOC_ENTITY):
+                self._user_input.pop(CONF_ADDITIONAL_BATTERY_SOC_ENTITY, None)
+
+            if not self._user_input.get(CONF_ADDITIONAL_BATTERY_MODE_ENTITY):
+                self._user_input.pop(CONF_ADDITIONAL_BATTERY_MODE_ENTITY, None)
+
+            if not self._user_input.get(CONF_ADDITIONAL_BATTERY_POWER_ENTITY):
+                self._user_input.pop(CONF_ADDITIONAL_BATTERY_POWER_ENTITY, None)
+
             if grid_mode != GRID_MODE_SINGLE:
                 self._user_input.pop(CONF_GRID_POWER_ENTITY, None)
 
@@ -172,6 +184,18 @@ class ZendureSmartFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not cleaned.get(CONF_WALLBOX_POWER_ENTITY):
                 cleaned.pop(CONF_WALLBOX_POWER_ENTITY, None)
+
+            if not cleaned.get(CONF_PV_FORECAST_ENTITY):
+                cleaned.pop(CONF_PV_FORECAST_ENTITY, None)
+
+            if not cleaned.get(CONF_ADDITIONAL_BATTERY_SOC_ENTITY):
+                cleaned.pop(CONF_ADDITIONAL_BATTERY_SOC_ENTITY, None)
+
+            if not cleaned.get(CONF_ADDITIONAL_BATTERY_MODE_ENTITY):
+                cleaned.pop(CONF_ADDITIONAL_BATTERY_MODE_ENTITY, None)
+
+            if not cleaned.get(CONF_ADDITIONAL_BATTERY_POWER_ENTITY):
+                cleaned.pop(CONF_ADDITIONAL_BATTERY_POWER_ENTITY, None)
 
             if not errors:
                 return self.async_update_reload_and_abort(
