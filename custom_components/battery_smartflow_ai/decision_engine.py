@@ -438,10 +438,7 @@ class DecisionEngine:
 
     def _compute_peak_threshold(self, prices: List[float], peak_factor: float) -> float:
         base_price = self._compute_base_price(prices)
-        return max(
-            base_price * peak_factor,
-            base_price + 0.03,
-        )
+        return base_price * peak_factor
 
     def _compute_valley_threshold(self, prices: List[float], valley_factor: float) -> float:
         base_price = self._compute_base_price(prices)

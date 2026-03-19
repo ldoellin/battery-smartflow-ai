@@ -911,10 +911,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             current_peak_threshold = None
             if daily_avg_price is not None:
-                current_peak_threshold = max(
-                    daily_avg_price * peak_factor,
-                    daily_avg_price + 0.03,
-                )
+                current_peak_threshold = daily_avg_price * peak_factor
 
             current_valley_threshold = None
             if daily_avg_price is not None:
