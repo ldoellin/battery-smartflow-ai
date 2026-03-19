@@ -126,6 +126,8 @@ class PeakRule(BaseRule):
     def evaluate(self, engine, ctx):
         if engine._byd_blocks_discharge(ctx) or engine._wallbox_blocks_discharge(ctx):
             return None
+        if engine._bridge_reserve_blocks_discharge(ctx):
+            return None
         if (
             ctx.soc > ctx.soc_min + 5
             and ctx.ai_mode in ("automatic", "winter")
@@ -159,6 +161,8 @@ class PeakRule(BaseRule):
 class ArbitrageRule(BaseRule):
     def evaluate(self, engine, ctx):
         if engine._byd_blocks_discharge(ctx) or engine._wallbox_blocks_discharge(ctx):
+            return None
+        if engine._bridge_reserve_blocks_discharge(ctx):
             return None
         if (
             ctx.price_now is not None
@@ -430,6 +434,20 @@ class DecisionEngine:
     def _wallbox_blocks_discharge(self, ctx: DecisionContext) -> bool:
         """Wallbox lädt → Zendure darf nicht entladen."""
         return float(ctx.wallbox_active_w or 0.0) > 0.0
+
+    def _bridge_reserve_blocks_discharge(self, ctx: DecisionContext) -> bool:
+        """Stufe 1: Im GO-Fenster (00–05 Uhr lokal) kein Entladen wenn die
+        verbleibende Kapazität nur noch für die Brückenzeit (05–08 Uhr) reicht.
+        NightChargeRule übernimmt ggf. Stufe 2 (nachladen)."""
+        if not (0 <= ctx.now.hour < 5):
+            return False
+        z_usable = max(0.0, (ctx.soc - ctx.soc_min) / 100.0 * ctx.battery_capacity_kwh)
+        byd_usable = (
+            max(0.0, ctx.additional_battery_soc / 100.0 * ctx.additional_battery_capacity_kwh)
+            if ctx.additional_battery_soc >= 0 and ctx.additional_battery_capacity_kwh > 0
+            else 0.0
+        )
+        return (z_usable + byd_usable) <= ctx.bridge_kwh
 
     def _compute_base_price(self, prices: List[float]) -> float:
         avg_price = sum(prices) / len(prices)
