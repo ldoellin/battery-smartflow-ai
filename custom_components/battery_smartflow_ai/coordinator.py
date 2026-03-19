@@ -704,7 +704,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 await self._load()
                 self._persist["last_ts"] = dt_util.utcnow().isoformat()
 
-            now = dt_util.utcnow()
+            now = dt_util.now()  # lokalisierte Zeit – korrekt für Stunden-Vergleiche
 
             soc = _to_float(self._state(self.entities.soc), None)
             pv = _to_float(self._state(self.entities.pv), None)

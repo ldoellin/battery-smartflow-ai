@@ -20,6 +20,22 @@ from .const import (
     DEFAULT_BATTERY_PACKS,
     SETTING_PEAK_FACTOR,
     DEFAULT_PEAK_FACTOR,
+    SETTING_SOC_MIN,
+    DEFAULT_SOC_MIN,
+    SETTING_SOC_MAX,
+    DEFAULT_SOC_MAX,
+    SETTING_MAX_CHARGE,
+    DEFAULT_MAX_CHARGE,
+    SETTING_MAX_DISCHARGE,
+    DEFAULT_MAX_DISCHARGE,
+    SETTING_EMERGENCY_SOC,
+    DEFAULT_EMERGENCY_SOC,
+    SETTING_EMERGENCY_CHARGE,
+    DEFAULT_EMERGENCY_CHARGE,
+    SETTING_PROFIT_MARGIN_PCT,
+    DEFAULT_PROFIT_MARGIN_PCT,
+    SETTING_VERY_EXPENSIVE_THRESHOLD,
+    DEFAULT_VERY_EXPENSIVE_THRESHOLD,
     # PV-Forecast (v3.2)
     SETTING_DAYTIME_CONSUMPTION_W,
     DEFAULT_DAYTIME_CONSUMPTION_W,
@@ -232,12 +248,30 @@ async def async_setup_entry(
     for ent in entities:
         key = ent.entity_description.runtime_key
 
-        if key == SETTING_PEAK_FACTOR:
+        if key == SETTING_BATTERY_PACKS:
+            default_value = DEFAULT_BATTERY_PACKS
+        elif key == SETTING_PEAK_FACTOR:
             default_value = DEFAULT_PEAK_FACTOR
         elif key == SETTING_VALLEY_FACTOR:
             default_value = DEFAULT_VALLEY_FACTOR
         elif key == SETTING_VERY_CHEAP_PRICE:
             default_value = DEFAULT_VERY_CHEAP_PRICE
+        elif key == SETTING_SOC_MIN:
+            default_value = DEFAULT_SOC_MIN
+        elif key == SETTING_SOC_MAX:
+            default_value = DEFAULT_SOC_MAX
+        elif key == SETTING_MAX_CHARGE:
+            default_value = DEFAULT_MAX_CHARGE
+        elif key == SETTING_MAX_DISCHARGE:
+            default_value = DEFAULT_MAX_DISCHARGE
+        elif key == SETTING_EMERGENCY_SOC:
+            default_value = DEFAULT_EMERGENCY_SOC
+        elif key == SETTING_EMERGENCY_CHARGE:
+            default_value = DEFAULT_EMERGENCY_CHARGE
+        elif key == SETTING_PROFIT_MARGIN_PCT:
+            default_value = DEFAULT_PROFIT_MARGIN_PCT
+        elif key == SETTING_VERY_EXPENSIVE_THRESHOLD:
+            default_value = DEFAULT_VERY_EXPENSIVE_THRESHOLD
         elif key == SETTING_DAYTIME_CONSUMPTION_W:
             default_value = DEFAULT_DAYTIME_CONSUMPTION_W
         elif key == SETTING_NIGHTTIME_CONSUMPTION_W:
