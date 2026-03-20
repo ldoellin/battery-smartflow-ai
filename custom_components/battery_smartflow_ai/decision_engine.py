@@ -359,7 +359,18 @@ class ManualRule(BaseRule):
                 reason="manual_charge",
             )
 
-        if ctx.manual_action in (MANUAL_CONST_DISCHARGE, "discharge"):
+        if ctx.manual_action == MANUAL_CONST_DISCHARGE:
+            # constant_discharge ignoriert BYD-Blocking – User hat es explizit gesetzt.
+            # NightChargeRule darf jedoch bei Bedarf überschreiben (Brückenreserve).
+            return DecisionResult(
+                action="discharge",
+                ac_mode="output",
+                charge_w=0.0,
+                discharge_w=float(ctx.max_discharge_w),
+                reason="manual_constant_discharge",
+            )
+
+        if ctx.manual_action == "discharge":
             if engine._byd_blocks_discharge(ctx):
                 return DecisionResult(
                     action="idle",
@@ -367,14 +378,6 @@ class ManualRule(BaseRule):
                     charge_w=0.0,
                     discharge_w=0.0,
                     reason="manual_idle",
-                )
-            if ctx.manual_action == MANUAL_CONST_DISCHARGE:
-                return DecisionResult(
-                    action="discharge",
-                    ac_mode="output",
-                    charge_w=0.0,
-                    discharge_w=float(ctx.max_discharge_w),
-                    reason="manual_constant_discharge",
                 )
             discharge_w = engine._delta_discharge(ctx)
             return DecisionResult(
