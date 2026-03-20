@@ -200,12 +200,12 @@ class NightChargeRule(BaseRule):
 
     def evaluate(self, engine, ctx):
         # automatic/winter: immer erlaubt
-        # manual + constant_discharge: GO-Fenster überschreibt die Abend-Automation
-        # manual + andere Aktionen (manuell angeordnetes Entladen etc.): nicht eingreifen
+        # manual + standby: GO-Fenster darf eingreifen (Nachtladung auch bei Standby)
+        # manual + constant_discharge / charge / discharge: nicht eingreifen (manuelle Aktion hat Vorrang)
         if ctx.ai_mode not in ("automatic", "winter", "manual"):
             return None
         if ctx.ai_mode == "manual" and getattr(ctx, "manual_action", "") not in (
-            "", "standby", "constant_discharge",
+            "", "standby",
         ):
             return None
         # Nur wenn PV-Nachtladen aktiviert (pv_forecast_kwh >= 0 = Feature on)
