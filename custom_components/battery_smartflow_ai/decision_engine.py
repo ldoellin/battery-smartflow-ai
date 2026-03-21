@@ -131,7 +131,6 @@ class PeakRule(BaseRule):
         if (
             ctx.soc > ctx.soc_min + 5
             and ctx.ai_mode in ("automatic", "winter")
-            and not engine._is_real_export(ctx)
         ):
             if engine._detect_adaptive_peak(ctx):
                 discharge_w = engine._delta_discharge(ctx)
@@ -360,17 +359,9 @@ class ManualRule(BaseRule):
             )
 
         if ctx.manual_action == MANUAL_CONST_DISCHARGE:
-            # Wallbox lädt → discharge_w=0, Zendure bleibt im Output-Modus aber gibt nichts ab.
-            # Kein Moduswechsel auf idle. max_discharge_w Einstellung bleibt erhalten.
+            # Konstante Entladung ignoriert Wallbox-Status bewusst – der User hat
+            # explizit eine feste Entladeleistung gesetzt und erwartet konstantes Entladen.
             # NightChargeRule darf überschreiben (läuft an Pos. 5, vor ManualRule).
-            if engine._wallbox_blocks_discharge(ctx):
-                return DecisionResult(
-                    action="discharge",
-                    ac_mode="output",
-                    charge_w=0.0,
-                    discharge_w=0.0,
-                    reason="manual_constant_discharge",
-                )
             return DecisionResult(
                 action="discharge",
                 ac_mode="output",
