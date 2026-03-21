@@ -318,6 +318,10 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._persist.update(data)
             if "runtime_mode" in data and isinstance(data["runtime_mode"], dict):
                 self.runtime_mode.update(data["runtime_mode"])
+        # Nach Neustart immer alle Setpoints neu senden – Zendure hat sich zurückgesetzt
+        self._persist["last_set_mode"] = None
+        self._persist["last_set_input_w"] = None
+        self._persist["last_set_output_w"] = None
 
     async def _save(self) -> None:
         self._persist["runtime_mode"] = dict(self.runtime_mode)
