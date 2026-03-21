@@ -360,8 +360,17 @@ class ManualRule(BaseRule):
             )
 
         if ctx.manual_action == MANUAL_CONST_DISCHARGE:
-            # constant_discharge ignoriert BYD-Blocking – User hat es explizit gesetzt.
-            # NightChargeRule darf jedoch bei Bedarf überschreiben (Brückenreserve).
+            # Wallbox lädt → discharge_w=0, Zendure bleibt im Output-Modus aber gibt nichts ab.
+            # Kein Moduswechsel auf idle. max_discharge_w Einstellung bleibt erhalten.
+            # NightChargeRule darf überschreiben (läuft an Pos. 5, vor ManualRule).
+            if engine._wallbox_blocks_discharge(ctx):
+                return DecisionResult(
+                    action="discharge",
+                    ac_mode="output",
+                    charge_w=0.0,
+                    discharge_w=0.0,
+                    reason="manual_constant_discharge",
+                )
             return DecisionResult(
                 action="discharge",
                 ac_mode="output",
@@ -371,7 +380,7 @@ class ManualRule(BaseRule):
             )
 
         if ctx.manual_action == "discharge":
-            if engine._byd_blocks_discharge(ctx):
+            if engine._byd_blocks_discharge(ctx) or engine._wallbox_blocks_discharge(ctx):
                 return DecisionResult(
                     action="idle",
                     ac_mode="input",
