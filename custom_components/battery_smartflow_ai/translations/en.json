@@ -148,7 +148,8 @@
     },
 
     "switch": {
-      "pv_forecast_enabled": { "name": "PV night charging" }
+      "pv_forecast_enabled": { "name": "PV night charging" },
+      "wallbox_block_enabled": { "name": "Block discharge during fast charging" }
     },
     "sensor": {
       "device_profile": { "name": "Active device profile" },

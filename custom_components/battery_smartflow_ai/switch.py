@@ -14,6 +14,8 @@ from .const import (
     INTEGRATION_VERSION,
     SETTING_PV_FORECAST_ENABLED,
     DEFAULT_PV_FORECAST_ENABLED,
+    SETTING_WALLBOX_BLOCK_ENABLED,
+    DEFAULT_WALLBOX_BLOCK_ENABLED,
 )
 
 
@@ -29,8 +31,14 @@ async def async_setup_entry(
     coordinator.runtime_settings[SETTING_PV_FORECAST_ENABLED] = float(
         entry.options.get(SETTING_PV_FORECAST_ENABLED, DEFAULT_PV_FORECAST_ENABLED)
     )
+    coordinator.runtime_settings[SETTING_WALLBOX_BLOCK_ENABLED] = float(
+        entry.options.get(SETTING_WALLBOX_BLOCK_ENABLED, DEFAULT_WALLBOX_BLOCK_ENABLED)
+    )
 
-    async_add_entities([PvNightChargeSwitch(coordinator, entry)])
+    async_add_entities([
+        PvNightChargeSwitch(coordinator, entry),
+        WallboxBlockSwitch(coordinator, entry),
+    ])
 
 
 class PvNightChargeSwitch(SwitchEntity):
@@ -76,6 +84,58 @@ class PvNightChargeSwitch(SwitchEntity):
         self.hass.config_entries.async_update_entry(
             self._entry,
             options={**self._entry.options, SETTING_PV_FORECAST_ENABLED: 0.0},
+        )
+        self.async_write_ha_state()
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            self.coordinator.async_add_listener(self.async_write_ha_state)
+        )
+
+
+class WallboxBlockSwitch(SwitchEntity):
+    """Switch to block Zendure discharge when wallbox is fast-charging."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "wallbox_block_enabled"
+    _attr_icon = "mdi:ev-station"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        self.coordinator = coordinator
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_wallbox_block_enabled"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry.entry_id)},
+            "name": INTEGRATION_NAME,
+            "manufacturer": INTEGRATION_MANUFACTURER,
+            "model": INTEGRATION_MODEL,
+            "sw_version": INTEGRATION_VERSION,
+        }
+
+    @property
+    def is_on(self) -> bool:
+        return (
+            float(
+                self.coordinator.runtime_settings.get(
+                    SETTING_WALLBOX_BLOCK_ENABLED, DEFAULT_WALLBOX_BLOCK_ENABLED
+                )
+            )
+            >= 1.0
+        )
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self.coordinator.runtime_settings[SETTING_WALLBOX_BLOCK_ENABLED] = 1.0
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={**self._entry.options, SETTING_WALLBOX_BLOCK_ENABLED: 1.0},
+        )
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self.coordinator.runtime_settings[SETTING_WALLBOX_BLOCK_ENABLED] = 0.0
+        self.hass.config_entries.async_update_entry(
+            self._entry,
+            options={**self._entry.options, SETTING_WALLBOX_BLOCK_ENABLED: 0.0},
         )
         self.async_write_ha_state()
 

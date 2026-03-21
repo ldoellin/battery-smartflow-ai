@@ -164,7 +164,8 @@
     },
 
     "switch": {
-      "pv_forecast_enabled": { "name": "PV-Nachtladung" }
+      "pv_forecast_enabled": { "name": "PV-Nachtladung" },
+      "wallbox_block_enabled": { "name": "Entladung bei Schnellladen verhindern" }
     },
 
     "sensor": {

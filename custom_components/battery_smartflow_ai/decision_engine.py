@@ -66,6 +66,7 @@ class DecisionContext:
     additional_battery_charge_w: float = 0.0
     additional_battery_discharge_w: float = 0.0
     wallbox_active_w: float = 0.0
+    wallbox_block_enabled: bool = True   # Entladung bei Schnellladen verhindern (Schalter)
 
     # --- Planning tuning ---
     peak_factor: float = 1.35
@@ -443,7 +444,9 @@ class DecisionEngine:
         return float(ctx.additional_battery_discharge_w or 0.0) > 0.0
 
     def _wallbox_blocks_discharge(self, ctx: DecisionContext) -> bool:
-        """Wallbox lädt → Zendure darf nicht entladen."""
+        """Wallbox lädt → Zendure darf nicht entladen (nur wenn Schalter aktiv)."""
+        if not ctx.wallbox_block_enabled:
+            return False
         return float(ctx.wallbox_active_w or 0.0) > 0.0
 
     def _bridge_reserve_blocks_discharge(self, ctx: DecisionContext) -> bool:

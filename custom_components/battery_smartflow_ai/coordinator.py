@@ -44,10 +44,12 @@ from .const import (
     SETTING_PV_FORECAST_ENABLED,
     SETTING_DAYTIME_CONSUMPTION_W,
     SETTING_NIGHTTIME_CONSUMPTION_W,
+    SETTING_WALLBOX_BLOCK_ENABLED,
     DEFAULT_ADDITIONAL_BATTERY_CAPACITY_KWH,
     DEFAULT_PV_FORECAST_ENABLED,
     DEFAULT_DAYTIME_CONSUMPTION_W,
     DEFAULT_NIGHTTIME_CONSUMPTION_W,
+    DEFAULT_WALLBOX_BLOCK_ENABLED,
     GRID_MODE_NONE,
     GRID_MODE_SINGLE,
     GRID_MODE_SPLIT,
@@ -1003,6 +1005,9 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 bridge_kwh=bridge_kwh,
                 nighttime_kwh=_nighttime_kwh,
                 pv_self_consumption_kwh=pv_self_consumption_kwh,
+                wallbox_block_enabled=float(
+                    self.runtime_settings.get(SETTING_WALLBOX_BLOCK_ENABLED, DEFAULT_WALLBOX_BLOCK_ENABLED)
+                ) >= 1.0,
             )
 
             decision = self._engine.evaluate(ctx)

@@ -78,6 +78,9 @@ SETTING_PV_FORECAST_ENABLED      = "pv_forecast_enabled"       # 0.0 = aus, 1.0 
 SETTING_DAYTIME_CONSUMPTION_W    = "daytime_consumption_w"     # Hausverbrauch tagsüber (08–18 Uhr) in W
 SETTING_NIGHTTIME_CONSUMPTION_W  = "nighttime_consumption_w"   # Hausverbrauch nachts + Morgenbrücke in W
 
+# Wallbox-Schutz (custom)
+SETTING_WALLBOX_BLOCK_ENABLED    = "wallbox_block_enabled"     # 1.0 = Entladung bei Schnellladen verhindern
+
 # Default
 DEFAULT_PACK_CAPACITY_KWH = 2.88
 DEFAULT_BATTERY_PACKS = 1
@@ -93,6 +96,7 @@ DEFAULT_ADDITIONAL_BATTERY_CAPACITY_KWH = 0.0
 DEFAULT_PV_FORECAST_ENABLED      = 0.0
 DEFAULT_DAYTIME_CONSUMPTION_W    = 500.0   # Watt (08–18 Uhr, 10h → 5 kWh Direktverbrauch)
 DEFAULT_NIGHTTIME_CONSUMPTION_W  = 500.0   # Watt (Nacht + Brücke 05–08 Uhr)
+DEFAULT_WALLBOX_BLOCK_ENABLED    = 1.0     # Standard: Entladung bei Schnellladen verhindern
 
 # --------------------------------------------------
 # Device profiles (V1.5.x / V3.2.0 overrides)
