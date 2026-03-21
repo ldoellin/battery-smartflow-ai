@@ -359,9 +359,17 @@ class ManualRule(BaseRule):
             )
 
         if ctx.manual_action == MANUAL_CONST_DISCHARGE:
-            # Konstante Entladung ignoriert Wallbox-Status bewusst – der User hat
-            # explizit eine feste Entladeleistung gesetzt und erwartet konstantes Entladen.
+            # Wallbox lädt → discharge_w=0, Zendure bleibt im Output-Modus aber gibt nichts ab.
+            # Kein Moduswechsel auf idle. max_discharge_w Einstellung bleibt erhalten.
             # NightChargeRule darf überschreiben (läuft an Pos. 5, vor ManualRule).
+            if engine._wallbox_blocks_discharge(ctx):
+                return DecisionResult(
+                    action="discharge",
+                    ac_mode="output",
+                    charge_w=0.0,
+                    discharge_w=0.0,
+                    reason="manual_constant_discharge",
+                )
             return DecisionResult(
                 action="discharge",
                 ac_mode="output",
