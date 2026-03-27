@@ -434,10 +434,10 @@ class DecisionEngine:
     # Helper methods
     # -------------------------------------------------
 
-    _EXPORT_THRESHOLD_W: float = 120.0
+    _EXPORT_THRESHOLD_W: float = 100.0
 
     def _is_real_export(self, ctx: DecisionContext) -> bool:
-        """True wenn Netto-Export > 120W (Zähler exportiert signifikant ins Netz)."""
+        """True wenn Netto-Export > 100W (Zähler exportiert signifikant ins Netz)."""
         net = ctx.grid_import_w - ctx.grid_export_w
         return net < -self._EXPORT_THRESHOLD_W
 
