@@ -129,6 +129,8 @@ class PeakRule(BaseRule):
             return None
         if engine._bridge_reserve_blocks_discharge(ctx):
             return None
+        if ctx.soc < ctx.soc_max and engine._delta_charge(ctx) > 0:
+            return None
         if (
             ctx.soc > ctx.soc_min + 5
             and ctx.ai_mode in ("automatic", "winter")
@@ -163,6 +165,8 @@ class ArbitrageRule(BaseRule):
         if engine._byd_blocks_discharge(ctx) or engine._wallbox_blocks_discharge(ctx):
             return None
         if engine._bridge_reserve_blocks_discharge(ctx):
+            return None
+        if ctx.soc < ctx.soc_max and engine._delta_charge(ctx) > 0:
             return None
         if (
             ctx.price_now is not None
