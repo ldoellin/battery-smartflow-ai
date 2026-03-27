@@ -131,6 +131,8 @@ class PeakRule(BaseRule):
             return None
         if ctx.soc < ctx.soc_max and engine._delta_charge(ctx) > 0:
             return None
+        if engine._is_real_export(ctx):
+            return None
         if (
             ctx.soc > ctx.soc_min + 5
             and ctx.ai_mode in ("automatic", "winter")
