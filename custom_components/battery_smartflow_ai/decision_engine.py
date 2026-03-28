@@ -578,10 +578,15 @@ class DecisionEngine:
             byd_usable  = max(0; additional_battery_soc / 100 × additional_battery_capacity_kwh)
             z_capacity  = battery_capacity_kwh × (soc_max - soc_min) / 100
             total_max   = z_capacity + additional_battery_capacity_kwh
-            target_total = min(total_max; bridge_kwh + max(0; daily_consumption_kwh - pv_forecast_kwh))
+            _pv_for_battery = max(0; pv_forecast_kwh - pv_self_consumption_kwh)
+            target_total = min(total_max; bridge_kwh + nighttime_kwh + max(0; daily_consumption_kwh - _pv_for_battery))
             charge_needed = max(0; target_total - (z_usable + byd_usable))
             z_charge    = min(z_capacity - z_usable; charge_needed)
             z_target_soc = min(soc_max; soc + z_charge / battery_capacity_kwh × 100)
+
+        Hinweis: Verwendet den vollen Tages-/Nachthorizont (inkl. nighttime_kwh) für
+        die Tagesplanung (adaptive_planning). Für das GO-Nachtfenster (0–5 Uhr) nutzt
+        NightChargeRule eine andere Formel (nur morning_need, kein nighttime_kwh).
         """
         if ctx.pv_forecast_kwh < 0:
             return None  # Feature deaktiviert oder Sensor unavailable

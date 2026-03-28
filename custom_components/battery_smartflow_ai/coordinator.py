@@ -1011,8 +1011,6 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
             decision = self._engine.evaluate(ctx)
-            # Decision reason merken für _manage_byd_night_charge (Fix 3)
-            self._last_decision_reason = decision.reason if decision else "idle"
 
             # --- BYD Nachtladung (v3.2) ---
             if pv_forecast_enabled:
@@ -1098,6 +1096,10 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 decision.discharge_w = 0.0
                 decision.action = "idle"
                 decision.reason = "soc_min_enforced"
+
+            # Decision reason merken — NACH allen SoC-Limit-Modifikationen,
+            # damit _manage_byd_night_charge im nächsten Zyklus den echten Zustand sieht.
+            self._last_decision_reason = decision.reason if decision else "idle"
 
             # -----------------------------
             # Apply setpoints
