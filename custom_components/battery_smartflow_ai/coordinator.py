@@ -1316,13 +1316,14 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         total_avail = z_usable + byd_usable
         total_max = z_capacity + ctx.additional_battery_capacity_kwh
-        # Haushaltslast abziehen: PV-Anteil, der direkt an den Verbraucher geht (nicht in Batterie)
-        _pv_for_battery = max(0.0, ctx.pv_forecast_kwh - ctx.pv_self_consumption_kwh)
-        target_total = min(
+        # Bedarf ab 5 Uhr: Brückenzeit (nighttime-Rate × 3h) + Tagesdefizit nach PV-Abzug.
+        # nighttime_kwh (0–5 Uhr) bewusst nicht enthalten: nach dem Laden pausiert die
+        # Entladung bis 5 Uhr, der Nachtverbrauch wird direkt aus dem Netz gedeckt.
+        morning_need = min(
             total_max,
-            ctx.bridge_kwh + ctx.nighttime_kwh + max(0.0, ctx.daily_consumption_kwh - _pv_for_battery),
+            ctx.bridge_kwh + max(0.0, ctx.pv_self_consumption_kwh - ctx.pv_forecast_kwh),
         )
-        charge_needed = max(0.0, target_total - total_avail)
+        charge_needed = max(0.0, morning_need - total_avail)
         z_charge = min(max(0.0, z_capacity - z_usable), charge_needed)
         # Fix 3: z_charge nur abziehen wenn SmartFlow Zendure wirklich lädt
         _ZENDURE_CHARGING_REASONS = frozenset({
