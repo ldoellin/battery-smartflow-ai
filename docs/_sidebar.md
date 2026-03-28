@@ -2,3 +2,4 @@
 * [Installation](installation.md)
 * [Anleitung](anleitung.md)
 * [Dashboard](dashboard.md)
+* [Architektur](architecture.md)
