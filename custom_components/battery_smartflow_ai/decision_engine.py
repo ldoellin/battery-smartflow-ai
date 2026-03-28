@@ -234,28 +234,47 @@ class NightChargeRule(BaseRule):
             max(0.0, ctx.additional_battery_soc / 100.0 * ctx.additional_battery_capacity_kwh)
             if ctx.additional_battery_soc >= 0 else 0.0
         )
-        # Haushaltslast abziehen: PV-Anteil, der direkt an den Verbraucher geht (nicht in Batterie)
-        _pv_for_battery = max(0.0, ctx.pv_forecast_kwh - ctx.pv_self_consumption_kwh)
-        target_total = min(
+        # Bedarf sauber nach Zeitabschnitt aufgeteilt:
+        # 05–08 Uhr: Brückenzeit mit Nachtverbrauchsrate (= bridge_kwh)
+        # 08–18 Uhr: Tagesverbrauch minus PV-Überschuss für Batterie
+        morning_need = min(
             z_capacity + ctx.additional_battery_capacity_kwh,
-            ctx.bridge_kwh + ctx.nighttime_kwh
-            + max(0.0, ctx.daily_consumption_kwh - _pv_for_battery),
+            ctx.bridge_kwh + max(0.0, ctx.pv_self_consumption_kwh - ctx.pv_forecast_kwh),
         )
-        charge_needed = max(0.0, target_total - (z_usable + byd_usable))
-        z_charge = min(max(0.0, z_capacity - z_usable), charge_needed)
+        total_need = min(
+            z_capacity + ctx.additional_battery_capacity_kwh,
+            ctx.nighttime_kwh + morning_need,
+        )
+        battery_usable = z_usable + byd_usable
 
-        if z_charge < 0.2:  # Vernachlässigbarer Zendure-Bedarf
+        # Stufe 1: Kapazität reicht für alles bis 8 Uhr → frei entladen lassen
+        if battery_usable >= total_need:
             return None
 
         if ctx.max_charge_w <= 0:
             return None
 
+        # Stufe 2/3: Kapazität reicht nicht mehr für alles → Lademenge nur ab 5 Uhr
+        charge_needed = max(0.0, morning_need - battery_usable)
+        z_charge = min(max(0.0, z_capacity - z_usable), charge_needed)
+
+        if z_charge >= 0.2:
+            # Defizit → minimal laden (nighttime_kwh bewusst nicht enthalten)
+            return DecisionResult(
+                action="charge",
+                ac_mode="input",
+                charge_w=ctx.max_charge_w,
+                discharge_w=0.0,
+                reason="night_charge_go_window",
+            )
+
+        # Kapazität knapp ausreichend oder z_charge minimal → Entladung pausieren
         return DecisionResult(
-            action="charge",
+            action="idle",
             ac_mode="input",
-            charge_w=ctx.max_charge_w,
+            charge_w=0.0,
             discharge_w=0.0,
-            reason="night_charge_go_window",
+            reason="night_charge_pause",
         )
 
 

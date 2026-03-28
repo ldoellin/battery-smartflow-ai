@@ -236,6 +236,7 @@
           "summer_cover_deficit": "Été : décharge (couvrir la charge maison)",
           "manual_constant_discharge": "Manuel : décharge constante",
           "night_charge_go_window": "Recharge nocturne : fenêtre bon marché active",
+          "night_charge_pause": "Charge nocturne : décharge en pause",
           "valley_boost_charge": "Charge (courant nocturne bon marché)",
           "bridge_reserve_block": "Décharge suspendue (protection réserve passerelle)"
         }

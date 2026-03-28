@@ -274,7 +274,9 @@
           "idle": "Bereit",
           "adaptive_peak_discharge": "Entladen wegen Preisspitze",
           "pv_surplus_charge": "Laden (PV-Überschuss)",
-          "valley_boost_charge": "Laden (Günstiger Nachtstrom)"
+          "valley_boost_charge": "Laden (Günstiger Nachtstrom)",
+          "night_charge_go_window": "Nachtladung: Günstiges Fenster aktiv",
+          "night_charge_pause": "Nachtladung: Entladung pausiert"
         }
       },
 

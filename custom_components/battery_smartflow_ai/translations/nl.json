@@ -313,6 +313,8 @@
           "adaptive_peak_discharge": "Ontladen vanwege prijspiek",
           "price_based_discharge": "Prijsgebaseerd ontladen",
           "valley_boost_charge": "Prijsdal gedetecteerd. Maximaal laden",
+          "night_charge_go_window": "Nachtlading: goedkoop venster actief",
+          "night_charge_pause": "Nachtlading: ontlading gepauzeerd",
           "additional_battery_charging_block": "Extra batterij laadt: ontladen geblokkeerd"
         }
       },

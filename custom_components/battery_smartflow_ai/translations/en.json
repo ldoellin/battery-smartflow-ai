@@ -245,6 +245,7 @@
           "summer_cover_deficit": "Summer: discharging (covering house load)",
           "manual_constant_discharge": "Manual: constant discharge",
           "night_charge_go_window": "Night charge: cheap window active",
+          "night_charge_pause": "Night charge: discharge paused",
           "valley_boost_charge": "Charging (cheap night power)",
           "bridge_reserve_block": "Discharge paused (bridge reserve protection)"
         }
