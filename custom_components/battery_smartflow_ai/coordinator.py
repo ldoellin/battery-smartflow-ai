@@ -1305,6 +1305,14 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if ctx.pv_forecast_kwh < 0:
             return
 
+        # Nur in Betriebsmodi, in denen auch NightChargeRule aktiv ist.
+        # Im Sommermodus entlädt Zendure frei; _bridge_reserve_blocks_discharge()
+        # schützt die Brückenreserve sobald (z_usable + byd_usable) ≤ bridge_kwh.
+        # Würde BYD hier trotzdem laden, bleibt die Summe künstlich hoch und
+        # der Guard greift nicht rechtzeitig.
+        if ctx.ai_mode not in ("automatic", "winter", "manual"):
+            return
+
         # Ohne konfigurierte BYD-Steuerentität: keine Aktion
         if not self.entities.additional_battery_mode:
             return
