@@ -484,8 +484,8 @@ class DecisionEngine:
 
     def _byd_blocks_charge(self, ctx: DecisionContext) -> bool:
         """BYD entlädt → Zendure darf nicht laden (Energie-Loop verhindern).
-        Schwellwert 80 W filtert Standby-Leakage und Messrauschen heraus."""
-        return float(ctx.additional_battery_discharge_w or 0.0) > 80.0
+        Schwellwert 150 W filtert kurze Lastimpulse und Messrauschen heraus."""
+        return float(ctx.additional_battery_discharge_w or 0.0) > 150.0
 
     def _wallbox_blocks_discharge(self, ctx: DecisionContext) -> bool:
         """Wallbox lädt → Zendure darf nicht entladen (nur wenn Schalter aktiv)."""
