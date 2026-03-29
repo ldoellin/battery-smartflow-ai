@@ -47,6 +47,9 @@ gewinnt. Nachfolgende Regeln werden nicht mehr evaluiert.
 - `_bridge_reserve_blocks_discharge()` — Kapazität ≤ Brückenreserve → kein Entladen
 - `_is_real_export()` — Netto-Export > 100 W → kein Entladen (PeakRule, ArbitrageRule, SummerRule)
 
+**Hinweis:** `_bridge_reserve_blocks_discharge()` greift in allen Entladeregeln (Peak, Arbitrage, Summer, Manual).
+In Sommermodus und manual-Modus ohne NightChargeRule-Schutz ist dieser Guard besonders wichtig.
+
 ### PV-first Guard (PeakRule, ArbitrageRule)
 
 ```python
@@ -124,6 +127,7 @@ byd_charge > 0.5 kWh  →  BYD-Modus: charge
 Ziel erreicht         →  BYD-Modus: stop   (oder pause wenn byd_usable ≤ bridge_kwh)
 byd_usable ≤ bridge   →  BYD-Modus: pause  (Brückenreserve schützen)
 05:00 Uhr UTC         →  Fenster-Ende: Modus zurücksetzen
+ai_mode → Sommer/etc. →  Modus-Wechsel während Fenster: BYD zurücksetzen (_byd_night_active, _byd_discharge_paused)
 ```
 
 ---

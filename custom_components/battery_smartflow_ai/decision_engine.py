@@ -351,7 +351,11 @@ class PvRule(BaseRule):
 
 class SummerRule(BaseRule):
     def evaluate(self, engine, ctx):
-        if engine._byd_blocks_discharge(ctx) or engine._wallbox_blocks_discharge(ctx):
+        if (
+            engine._byd_blocks_discharge(ctx)
+            or engine._wallbox_blocks_discharge(ctx)
+            or engine._bridge_reserve_blocks_discharge(ctx)
+        ):
             return None
         if (
             ctx.ai_mode == "summer"
@@ -396,6 +400,16 @@ class ManualRule(BaseRule):
                     discharge_w=0.0,
                     reason="manual_constant_discharge",
                 )
+            # BYD lädt → kein Entladen (verhindert Energiekreis: BYD lädt, Zendure entlädt)
+            # Brückenreserve fast erreicht → Entladung stoppen (Schutz für Morgenstunden)
+            if engine._byd_blocks_discharge(ctx) or engine._bridge_reserve_blocks_discharge(ctx):
+                return DecisionResult(
+                    action="idle",
+                    ac_mode="input",
+                    charge_w=0.0,
+                    discharge_w=0.0,
+                    reason="manual_idle",
+                )
             return DecisionResult(
                 action="discharge",
                 ac_mode="output",
@@ -405,7 +419,11 @@ class ManualRule(BaseRule):
             )
 
         if ctx.manual_action == "discharge":
-            if engine._byd_blocks_discharge(ctx) or engine._wallbox_blocks_discharge(ctx):
+            if (
+                engine._byd_blocks_discharge(ctx)
+                or engine._wallbox_blocks_discharge(ctx)
+                or engine._bridge_reserve_blocks_discharge(ctx)
+            ):
                 return DecisionResult(
                     action="idle",
                     ac_mode="input",

@@ -1311,6 +1311,22 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Würde BYD hier trotzdem laden, bleibt die Summe künstlich hoch und
         # der Guard greift nicht rechtzeitig.
         if ctx.ai_mode not in ("automatic", "winter", "manual"):
+            # Modus-Wechsel WÄHREND des GO-Fensters: BYD-Flags zurücksetzen,
+            # damit BYD nicht im Lade- oder Pause-Zustand stecken bleibt.
+            if self._byd_night_active:
+                _LOGGER.info(
+                    "SmartFlow Nachtladen: Modus wechselte zu %s während GO-Fenster – BYD → %s",
+                    ctx.ai_mode, self._byd_stop_mode,
+                )
+                await self._byd_set_mode(self._byd_stop_mode)
+                self._byd_night_active = False
+            if self._byd_discharge_paused:
+                _LOGGER.info(
+                    "SmartFlow Nachtladen: Modus wechselte zu %s – Entladepause aufheben → %s",
+                    ctx.ai_mode, self._byd_stop_mode,
+                )
+                await self._byd_set_mode(self._byd_stop_mode)
+                self._byd_discharge_paused = False
             return
 
         # Ohne konfigurierte BYD-Steuerentität: keine Aktion
