@@ -361,7 +361,10 @@ class SummerRule(BaseRule):
             ctx.ai_mode == "summer"
             or (ctx.ai_mode == "automatic" and ctx.season == "summer")
         ):
-            if ctx.soc > ctx.soc_min and not engine._is_real_export(ctx):
+            if ctx.soc > ctx.soc_min:
+                # _delta_discharge() übernimmt den Exportschutz via EXPORT_GUARD:
+                # Net-Export > 100W → aggressive Kürzung auf 0W
+                # Net-Export 0–100W → Entladung bleibt stabil (kein Reset)
                 discharge_w = engine._delta_discharge(ctx)
                 if discharge_w > 0:
                     return DecisionResult(
