@@ -1398,12 +1398,14 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             was_night_active = self._byd_night_active   # merken VOR Reset (Fix 2)
             self._byd_night_active = False
 
-            if byd_usable <= ctx.bridge_kwh:
-                # Überbrückungsenergie schützen: BYD einfrieren
+            if (z_usable + byd_usable) <= ctx.bridge_kwh:
+                # Überbrückungsenergie schützen: BYD einfrieren.
+                # Prüfung analog zu _bridge_reserve_blocks_discharge(): kombinierte Kapazität
+                # beider Batterien gegen Brückenbedarf – nicht BYD alleine.
                 if current_mode != self._byd_pause_mode:
                     _LOGGER.info(
-                        "SmartFlow Nachtladen: BYD %.2f kWh ≤ Brücke %.2f kWh → %s",
-                        byd_usable, ctx.bridge_kwh, self._byd_pause_mode,
+                        "SmartFlow Nachtladen: Z+BYD %.2f kWh ≤ Brücke %.2f kWh → %s",
+                        z_usable + byd_usable, ctx.bridge_kwh, self._byd_pause_mode,
                     )
                     await self._byd_set_mode(self._byd_pause_mode)
                     self._byd_discharge_paused = True
