@@ -328,6 +328,10 @@ class PvRule(BaseRule):
             return None
         if engine._byd_blocks_charge(ctx):
             return None
+        # Nicht auf Laden wechseln wenn Zendure gerade entladen hat.
+        # Kurzer Export durch eigene Entladung ist kein PV-Überschuss-Signal.
+        if ctx.prev_discharge_w > 0:
+            return None
         # Wenn wir gerade aktiv planen zu laden,
         # soll PV diese Entscheidung nicht überschreiben
         planning = engine._evaluate_adaptive_planning(ctx)
