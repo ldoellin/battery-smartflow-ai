@@ -205,10 +205,10 @@ class NightChargeRule(BaseRule):
     """
 
     def evaluate(self, engine, ctx):
-        # automatic/winter: immer erlaubt
+        # automatic/winter/summer: immer erlaubt (GO-Fenster gilt saisonunabhängig)
         # manual + constant_discharge: GO-Fenster darf überschreiben (Brückenreserve hat Vorrang)
         # manual + charge/discharge: nicht eingreifen (explizite manuelle Lade-/Entlade-Aktion)
-        if ctx.ai_mode not in ("automatic", "winter", "manual"):
+        if ctx.ai_mode not in ("automatic", "winter", "summer", "manual"):
             return None
         if ctx.ai_mode == "manual" and getattr(ctx, "manual_action", "") not in (
             "", "standby", "constant_discharge",
@@ -649,7 +649,7 @@ class DecisionEngine:
 
     def _evaluate_adaptive_planning(self, ctx: DecisionContext) -> Optional[DecisionResult]:
         if (
-            ctx.ai_mode not in ("automatic", "winter")
+            ctx.ai_mode not in ("automatic", "winter", "summer")
             or not ctx.price_points
             or ctx.price_now is None
             or ctx.battery_capacity_kwh <= 0
