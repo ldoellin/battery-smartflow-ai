@@ -254,49 +254,6 @@ class NightChargeRule(BaseRule):
         )
 
 
-class ValleyBoostRule(BaseRule):
-    def evaluate(self, engine, ctx):
-        if engine._byd_blocks_charge(ctx):
-            return None
-        # Nur im Wintermodus
-        if ctx.ai_mode not in ("winter", "automatic") or ctx.season != "winter":
-            return None
-
-        if ctx.price_now is None:
-            return None
-
-        if ctx.soc >= ctx.soc_max:
-            return None
-
-        if not ctx.price_points:
-            return None
-
-        prices = [p.price for p in ctx.price_points]
-        if not prices:
-            return None
-
-        base_price = engine._compute_base_price(prices)
-        valley_threshold = base_price * ctx.valley_factor
-
-        # Kein Valley -> kein Boost
-        if ctx.price_now > valley_threshold:
-            return None
-
-        # Nur wenn tatsächlich PV vorhanden ist
-        if ctx.pv_w < 100:
-            return None
-
-        if ctx.max_charge_w <= 0:
-            return None
-
-        return DecisionResult(
-            action="charge",
-            ac_mode="input",
-            charge_w=ctx.max_charge_w,
-            discharge_w=0.0,
-            reason="valley_boost_charge",
-        )
-
 
 class PvRule(BaseRule):
     def evaluate(self, engine, ctx):
@@ -442,8 +399,7 @@ class DecisionEngine:
             EmergencyRule(),
             PeakRule(),
             PlanningRule(),
-            NightChargeRule(),   # Prio 4: GO-Fenster Nachtladung (Fix 4)
-            ValleyBoostRule(),
+            NightChargeRule(),
             PvRule(),
             SummerRule(),
             ManualRule(),

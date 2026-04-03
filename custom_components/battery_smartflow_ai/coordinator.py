@@ -1356,8 +1356,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Fix 3: z_charge nur abziehen wenn SmartFlow Zendure wirklich lädt
         _ZENDURE_CHARGING_REASONS = frozenset({
             "night_charge_go_window", "planning_latest_start",
-            "valley_boost_charge", "manual_charge",
-            "emergency_latched_charge", "pv_surplus_charge",
+            "manual_charge", "emergency_latched_charge", "pv_surplus_charge",
         })
         zendure_is_charging = getattr(self, "_last_decision_reason", "idle") in _ZENDURE_CHARGING_REASONS
         effective_z_charge = z_charge if zendure_is_charging else 0.0
