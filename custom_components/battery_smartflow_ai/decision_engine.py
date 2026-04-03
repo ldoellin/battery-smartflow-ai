@@ -214,9 +214,6 @@ class NightChargeRule(BaseRule):
             "", "standby", "constant_discharge",
         ):
             return None
-        # Nur wenn PV-Nachtladen aktiviert (pv_forecast_kwh >= 0 = Feature on)
-        if ctx.pv_forecast_kwh < 0:
-            return None
         # Nur im Nachtfenster (00:00–05:00 UTC)
         if not (0 <= ctx.now.hour < 5):
             return None
@@ -226,6 +223,10 @@ class NightChargeRule(BaseRule):
         # BYD entlädt → kein Laden (Standard-Guard)
         if engine._byd_blocks_charge(ctx):
             return None
+
+        # pv_forecast_kwh < 0 = Sensor unavailable oder Feature deaktiviert
+        # → konservativ: kein PV erwartet (= voller Morgenbedarf muss geladen werden)
+        pv_forecast = max(0.0, ctx.pv_forecast_kwh)
 
         # Zendure-Ladebedarf berechnen (identische Formel wie coordinator)
         z_usable = max(0.0, (ctx.soc - ctx.soc_min) / 100.0 * ctx.battery_capacity_kwh)
@@ -239,7 +240,7 @@ class NightChargeRule(BaseRule):
         # 08–18 Uhr: Tagesverbrauch minus PV-Überschuss für Batterie
         morning_need = min(
             z_capacity + ctx.additional_battery_capacity_kwh,
-            ctx.bridge_kwh + max(0.0, ctx.pv_self_consumption_kwh - ctx.pv_forecast_kwh),
+            ctx.bridge_kwh + max(0.0, ctx.pv_self_consumption_kwh - pv_forecast),
         )
         total_need = min(
             z_capacity + ctx.additional_battery_capacity_kwh,

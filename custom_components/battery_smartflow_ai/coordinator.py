@@ -1301,16 +1301,8 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._byd_discharge_paused = False
             return
 
-        # Ohne gültigen PV-Forecast: keine Aktion
-        if ctx.pv_forecast_kwh < 0:
-            return
-
         # Nur in Betriebsmodi, in denen auch NightChargeRule aktiv ist.
-        # Im Sommermodus entlädt Zendure frei; _bridge_reserve_blocks_discharge()
-        # schützt die Brückenreserve sobald (z_usable + byd_usable) ≤ bridge_kwh.
-        # Würde BYD hier trotzdem laden, bleibt die Summe künstlich hoch und
-        # der Guard greift nicht rechtzeitig.
-        if ctx.ai_mode not in ("automatic", "winter", "manual"):
+        if ctx.ai_mode not in ("automatic", "winter", "summer", "manual"):
             # Modus-Wechsel WÄHREND des GO-Fensters: BYD-Flags zurücksetzen,
             # damit BYD nicht im Lade- oder Pause-Zustand stecken bleibt.
             if self._byd_night_active:
@@ -1345,9 +1337,11 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Bedarf ab 5 Uhr: Brückenzeit (nighttime-Rate × 3h) + Tagesdefizit nach PV-Abzug.
         # nighttime_kwh (0–5 Uhr) bewusst nicht enthalten: nach dem Laden pausiert die
         # Entladung bis 5 Uhr, der Nachtverbrauch wird direkt aus dem Netz gedeckt.
+        # pv_forecast_kwh < 0 = Sensor unavailable → konservativ: kein PV erwartet
+        _pv_fc = max(0.0, ctx.pv_forecast_kwh)
         morning_need = min(
             total_max,
-            ctx.bridge_kwh + max(0.0, ctx.pv_self_consumption_kwh - ctx.pv_forecast_kwh),
+            ctx.bridge_kwh + max(0.0, ctx.pv_self_consumption_kwh - _pv_fc),
         )
         charge_needed = max(0.0, morning_need - total_avail)
         z_charge = min(max(0.0, z_capacity - z_usable), charge_needed)
