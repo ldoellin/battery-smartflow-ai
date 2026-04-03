@@ -255,9 +255,8 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._byd_pause_mode: str = entry.data.get(
             CONF_ADDITIONAL_BATTERY_PAUSE_MODE, "Akku Pause"
         )
-        # Zustandsmerker: BYD aktuell durch SmartFlow-Nachtladung gesteuert?
+        # Zustandsmerker: werden aus _persist geladen (BUG-010)
         self._byd_night_active: bool = False
-        # Zustandsmerker: BYD-Entladung zum Schutz der Überbrückungsenergie pausiert?
         self._byd_discharge_paused: bool = False
 
         self.runtime_mode: dict[str, Any] = {
@@ -268,10 +267,10 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._engine = DecisionEngine()
 
         # Hysterese-Tracker für BYD und Wallbox Koordination
-        self._hys_byd_charge    = _HysteresisState(delay_on_s=15, delay_off_s=45, threshold=80.0)
+        self._hys_byd_charge    = _HysteresisState(delay_on_s=15, delay_off_s=300, threshold=80.0)
         self._hys_byd_discharge = _HysteresisState(delay_on_s=15, delay_off_s=300, threshold=80.0)
-        self._hys_wallbox_pv    = _HysteresisState(delay_on_s=25, delay_off_s=45, threshold=500.0)
-        self._hys_wallbox_grid  = _HysteresisState(delay_on_s=5,  delay_off_s=45, threshold=7000.0)
+        self._hys_wallbox_pv    = _HysteresisState(delay_on_s=25, delay_off_s=300, threshold=500.0)
+        self._hys_wallbox_grid  = _HysteresisState(delay_on_s=5,  delay_off_s=300, threshold=7000.0)
 
         self._store = Store(hass, STORE_VERSION, f"{DOMAIN}.{entry.entry_id}")
         self._persist: dict[str, Any] = {
@@ -303,6 +302,10 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "season_mode": "winter",  # winter|summer
             "season_counter": 0,
 
+            # BYD-Nachtlade-Zustand (BUG-010)
+            "byd_night_active": False,
+            "byd_discharge_paused": False,
+
             # debug
             "debug": "init",
         }
@@ -320,6 +323,9 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._persist.update(data)
             if "runtime_mode" in data and isinstance(data["runtime_mode"], dict):
                 self.runtime_mode.update(data["runtime_mode"])
+            # BUG-010: BYD-Zustand nach Neustart wiederherstellen
+            self._byd_night_active = bool(data.get("byd_night_active", False))
+            self._byd_discharge_paused = bool(data.get("byd_discharge_paused", False))
         # Nach Neustart immer alle Setpoints neu senden – Zendure hat sich zurückgesetzt
         self._persist["last_set_mode"] = None
         self._persist["last_set_input_w"] = None
@@ -327,6 +333,8 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _save(self) -> None:
         self._persist["runtime_mode"] = dict(self.runtime_mode)
+        self._persist["byd_night_active"] = self._byd_night_active
+        self._persist["byd_discharge_paused"] = self._byd_discharge_paused
         await self._store.async_save(self._persist)
 
     def _state(self, entity_id: str | None) -> Any:

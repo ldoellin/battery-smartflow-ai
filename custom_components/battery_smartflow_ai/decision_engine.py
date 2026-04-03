@@ -135,7 +135,7 @@ class PeakRule(BaseRule):
             return None
         if (
             ctx.soc > ctx.soc_min + 5
-            and ctx.ai_mode in ("automatic", "winter")
+            and ctx.ai_mode in ("automatic", "winter", "summer")
         ):
             if engine._detect_adaptive_peak(ctx):
                 discharge_w = engine._delta_discharge(ctx)
@@ -162,31 +162,6 @@ class PeakRule(BaseRule):
         return None
 
 
-class ArbitrageRule(BaseRule):
-    def evaluate(self, engine, ctx):
-        if engine._byd_blocks_discharge(ctx) or engine._wallbox_blocks_discharge(ctx):
-            return None
-        if engine._bridge_reserve_blocks_discharge(ctx):
-            return None
-        if ctx.soc < ctx.soc_max and engine._delta_charge(ctx) > 0:
-            return None
-        if (
-            ctx.price_now is not None
-            and ctx.avg_charge_price is not None
-            and ctx.price_now >= ctx.expensive_threshold
-            and ctx.price_now > ctx.avg_charge_price
-            and ctx.soc > ctx.soc_min + 5
-            and ctx.ai_mode in ("automatic", "winter")
-            and not engine._is_real_export(ctx)
-        ):
-            discharge_w = engine._delta_discharge(ctx)
-            return DecisionResult(
-                action="discharge",
-                ac_mode="output",
-                charge_w=0.0,
-                discharge_w=discharge_w,
-                reason="price_based_discharge",
-            )
         return None
 
 
@@ -466,9 +441,8 @@ class DecisionEngine:
         self._rules = [
             EmergencyRule(),
             PeakRule(),
-            ArbitrageRule(),
             PlanningRule(),
-            NightChargeRule(),   # Prio 5: GO-Fenster Nachtladung (Fix 4)
+            NightChargeRule(),   # Prio 4: GO-Fenster Nachtladung (Fix 4)
             ValleyBoostRule(),
             PvRule(),
             SummerRule(),
