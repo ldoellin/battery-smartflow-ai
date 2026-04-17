@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import statistics
 from dataclasses import dataclass
@@ -7,6 +8,9 @@ from datetime import datetime, timedelta
 from typing import List, Literal, Optional
 
 from .power_controller import PowerController, PowerContext
+from .const import MANUAL_CONST_DISCHARGE
+
+_LOGGER = logging.getLogger(__name__)
 
 
 # --------------------------------------------------
@@ -61,13 +65,28 @@ class DecisionContext:
 
     battery_capacity_kwh: float
 
-    # Zusatzakku
+    # Zusatzakku + Wallbox Koordination
     additional_battery_charge_w: float = 0.0
+    additional_battery_discharge_w: float = 0.0
+    wallbox_active_w: float = 0.0
+    wallbox_block_enabled: bool = True   # Entladung bei Schnellladen verhindern (Schalter)
 
     # --- Planning tuning ---
     peak_factor: float = 1.35
     valley_factor: float = 0.85
     very_cheap_price: Optional[float] = None
+
+    # --- PV-Forecast-basierte Nachtladung (v3.2) ---
+    pv_forecast_kwh: float = -1.0             # -1 = Feature deaktiviert / Sensor unavailable
+    additional_battery_soc: float = -1.0      # -1 = kein Zusatzakku konfiguriert
+    additional_battery_capacity_kwh: float = 0.0
+    daily_consumption_kwh: float = 12.0
+    bridge_kwh: float = 1.5
+    nighttime_kwh: float = 0.0                # Hausverbrauch bis 05:00 (0 tagsüber)
+    pv_self_consumption_kwh: float = 5.0      # PV direkt Hausverbrauch tagsüber (nicht in Batterie)
+    pv_optimism_factor: float = 1.5           # Skalierung P10→optimistisch für Nachtlade-Mengenkalkulation
+    night_charge_required: bool = False   # Ladebedarf ≥ 0.2 kWh (aus letztem BYD-Zyklus)
+    night_charge_active: bool = False     # BYD lädt gerade aktiv (aus letztem BYD-Zyklus)
 
 
 @dataclass
@@ -78,6 +97,24 @@ class DecisionResult:
     discharge_w: float
     reason: str
     target_soc: Optional[float] = None
+
+
+@dataclass
+class NightEnergyAssessment:
+    """Energiebilanz für das GO-Fenster (00–05 Uhr).
+
+    Einzige Quelle der Wahrheit für Nacht-Energieberechnungen.
+    Wird vom NightWindowController berechnet und an BydNightChargeManager
+    weitergegeben — keine doppelte Implementierung mehr.
+    """
+    bridge_covered: bool       # projected_at_5 >= bridge_kwh
+    evening_covered: bool      # battery_at_18 >= evening_need
+    charge_needed_kwh: float   # Gesamtladebedarf (Zendure + BYD)
+    z_charge_kwh: float        # Zendures Anteil am Ladebedarf
+    # Diagnose
+    projected_at_5: float = 0.0
+    battery_at_18: float = 0.0
+    evening_need: float = 0.0
 
 
 # ==================================================
@@ -110,24 +147,19 @@ class EmergencyRule(BaseRule):
         return None
 
 
-class AdditionalBatteryBlockRule(BaseRule):
-    def evaluate(self, engine, ctx):
-        if float(ctx.additional_battery_charge_w or 0.0) > 0.0:
-            return DecisionResult(
-                action="idle",
-                ac_mode="input",
-                charge_w=0.0,
-                discharge_w=0.0,
-                reason="additional_battery_charging_block",
-            )
-        return None
-
-
 class PeakRule(BaseRule):
     def evaluate(self, engine, ctx):
+        if engine._byd_blocks_discharge(ctx) or engine._wallbox_blocks_discharge(ctx):
+            return None
+        if engine._bridge_reserve_blocks_discharge(ctx):
+            return None
+        if ctx.soc < ctx.soc_max and engine._delta_charge(ctx) > 0:
+            return None
+        if engine._is_real_export(ctx):
+            return None
         if (
             ctx.soc > ctx.soc_min + 5
-            and ctx.ai_mode in ("automatic", "winter")
+            and ctx.ai_mode in ("automatic", "winter", "summer")
         ):
             if engine._detect_adaptive_peak(ctx):
                 discharge_w = engine._delta_discharge(ctx)
@@ -154,77 +186,29 @@ class PeakRule(BaseRule):
         return None
 
 
-class ArbitrageRule(BaseRule):
-    def evaluate(self, engine, ctx):
-        if (
-            ctx.price_now is not None
-            and ctx.avg_charge_price is not None
-            and ctx.price_now >= ctx.expensive_threshold
-            and ctx.price_now > ctx.avg_charge_price
-            and ctx.soc > ctx.soc_min + 5
-            and ctx.ai_mode in ("automatic", "winter")
-        ):
-            discharge_w = engine._delta_discharge(ctx)
-            return DecisionResult(
-                action="discharge",
-                ac_mode="output",
-                charge_w=0.0,
-                discharge_w=discharge_w,
-                reason="price_based_discharge",
-            )
-        return None
-
-
 class PlanningRule(BaseRule):
     def evaluate(self, engine, ctx):
-        return engine._evaluate_adaptive_planning(ctx)
-
-
-class ValleyBoostRule(BaseRule):
-    def evaluate(self, engine, ctx):
-        # Nur im Wintermodus
-        if ctx.ai_mode not in ("winter", "automatic") or ctx.season != "winter":
+        if engine._byd_blocks_charge(ctx):
             return None
+        return engine._planning_result
 
-        if ctx.price_now is None:
-            return None
 
-        if ctx.soc >= ctx.soc_max:
-            return None
 
-        if not ctx.price_points:
-            return None
-
-        prices = [p.price for p in ctx.price_points]
-        if not prices:
-            return None
-
-        base_price = engine._compute_base_price(prices)
-        valley_threshold = base_price * ctx.valley_factor
-
-        # Kein Valley -> kein Boost
-        if ctx.price_now > valley_threshold:
-            return None
-
-        # Nur wenn tatsächlich PV vorhanden ist
-        if ctx.pv_w < 100:
-            return None
-
-        return DecisionResult(
-            action="charge",
-            ac_mode="input",
-            charge_w=ctx.max_charge_w,
-            discharge_w=0.0,
-            reason="valley_boost_charge",
-        )
 
 
 class PvRule(BaseRule):
     def evaluate(self, engine, ctx):
+        if ctx.ai_mode == "manual":
+            return None
+        if engine._byd_blocks_charge(ctx):
+            return None
+        # Nicht auf Laden wechseln wenn Zendure gerade entladen hat.
+        # Kurzer Export durch eigene Entladung ist kein PV-Überschuss-Signal.
+        if ctx.prev_discharge_w > 0:
+            return None
         # Wenn wir gerade aktiv planen zu laden,
         # soll PV diese Entscheidung nicht überschreiben
-        planning = engine._evaluate_adaptive_planning(ctx)
-        if planning is not None:
+        if engine._planning_result is not None:
             return None
 
         if ctx.soc < ctx.soc_max:
@@ -245,10 +229,19 @@ class PvRule(BaseRule):
 class SummerRule(BaseRule):
     def evaluate(self, engine, ctx):
         if (
+            engine._byd_blocks_discharge(ctx)
+            or engine._wallbox_blocks_discharge(ctx)
+            or engine._bridge_reserve_blocks_discharge(ctx)
+        ):
+            return None
+        if (
             ctx.ai_mode == "summer"
             or (ctx.ai_mode == "automatic" and ctx.season == "summer")
         ):
             if ctx.soc > ctx.soc_min:
+                # _delta_discharge() übernimmt den Exportschutz via EXPORT_GUARD:
+                # Net-Export > 100W → aggressive Kürzung auf 0W
+                # Net-Export 0–100W → Entladung bleibt stabil (kein Reset)
                 discharge_w = engine._delta_discharge(ctx)
                 if discharge_w > 0:
                     return DecisionResult(
@@ -275,7 +268,49 @@ class ManualRule(BaseRule):
                 reason="manual_charge",
             )
 
+        if ctx.manual_action == MANUAL_CONST_DISCHARGE:
+            # Wallbox lädt → discharge_w=0, Zendure bleibt im Output-Modus aber gibt nichts ab.
+            # Kein Moduswechsel auf idle. max_discharge_w Einstellung bleibt erhalten.
+            # NightChargeRule darf überschreiben (läuft an Pos. 3, vor ManualRule).
+            if engine._wallbox_blocks_discharge(ctx):
+                return DecisionResult(
+                    action="discharge",
+                    ac_mode="output",
+                    charge_w=0.0,
+                    discharge_w=0.0,
+                    reason="manual_constant_discharge",
+                )
+            # BYD lädt → kein Entladen (verhindert Energiekreis: BYD lädt, Zendure entlädt)
+            # Brückenreserve fast erreicht → Entladung stoppen (Schutz für Morgenstunden)
+            if engine._byd_blocks_discharge(ctx) or engine._bridge_reserve_blocks_discharge(ctx):
+                return DecisionResult(
+                    action="idle",
+                    ac_mode="input",
+                    charge_w=0.0,
+                    discharge_w=0.0,
+                    reason="manual_idle",
+                )
+            return DecisionResult(
+                action="discharge",
+                ac_mode="output",
+                charge_w=0.0,
+                discharge_w=float(ctx.max_discharge_w),
+                reason="manual_constant_discharge",
+            )
+
         if ctx.manual_action == "discharge":
+            if (
+                engine._byd_blocks_discharge(ctx)
+                or engine._wallbox_blocks_discharge(ctx)
+                or engine._bridge_reserve_blocks_discharge(ctx)
+            ):
+                return DecisionResult(
+                    action="idle",
+                    ac_mode="input",
+                    charge_w=0.0,
+                    discharge_w=0.0,
+                    reason="manual_idle",
+                )
             discharge_w = engine._delta_discharge(ctx)
             return DecisionResult(
                 action="discharge",
@@ -295,36 +330,248 @@ class ManualRule(BaseRule):
 
 
 # ==================================================
+# NIGHT WINDOW CONTROLLER
+# ==================================================
+
+class NightWindowController:
+    """Steuert alle Entscheidungen im GO-Fenster (00–05 Uhr).
+
+    Ersetzt NightChargeRule als eigenständiger Controller.
+    DecisionEngine delegiert das 00–05-Fenster vollständig hierher.
+
+    Vorbereitet für EnWG 14a Modul 3:
+    - round_trip_efficiency aus Geräteprofil
+    - discharge_is_profitable() berechnet Break-Even nach Wandlungsverlusten
+    - Laden vs. Entladen vs. Idle an einem Ort entschieden
+    """
+
+    def __init__(self, round_trip_efficiency: float = 0.90) -> None:
+        self._round_trip_efficiency = round_trip_efficiency
+        self.last_assessment: Optional[NightEnergyAssessment] = None
+
+    # --------------------------------------------------
+    # Energiebilanz — einzige Implementierung dieser Logik
+    # --------------------------------------------------
+
+    def assess(self, ctx: DecisionContext) -> NightEnergyAssessment:
+        pv_forecast = max(0.0, ctx.pv_forecast_kwh)  # < 0 = deaktiviert → konservativ 0
+
+        z_usable   = max(0.0, (ctx.soc - ctx.soc_min) / 100.0 * ctx.battery_capacity_kwh)
+        z_capacity = ctx.battery_capacity_kwh * (ctx.soc_max - ctx.soc_min) / 100.0
+        byd_usable = (
+            max(0.0, ctx.additional_battery_soc / 100.0 * ctx.additional_battery_capacity_kwh)
+            if ctx.additional_battery_soc >= 0 else 0.0
+        )
+        total_capacity = z_capacity + ctx.additional_battery_capacity_kwh
+        battery_usable = z_usable + byd_usable
+
+        projected_at_5 = battery_usable - ctx.nighttime_kwh
+        pv_surplus = max(
+            0.0,
+            pv_forecast * ctx.pv_optimism_factor - ctx.pv_self_consumption_kwh,
+        )
+        evening_need   = ctx.bridge_kwh * 2.0
+        bridge_covered = projected_at_5 >= ctx.bridge_kwh
+
+        if bridge_covered:
+            battery_at_08 = projected_at_5 - ctx.bridge_kwh
+            battery_at_18 = min(total_capacity, battery_at_08 + pv_surplus)
+            evening_covered = battery_at_18 >= evening_need
+        else:
+            battery_at_18   = 0.0
+            evening_covered = False
+
+        if not bridge_covered:
+            charge_needed = (
+                0.0 if battery_usable >= ctx.bridge_kwh
+                else max(0.0, ctx.bridge_kwh - battery_usable)
+            )
+        elif not evening_covered:
+            charge_needed = max(0.0, evening_need - battery_at_18)
+        else:
+            charge_needed = 0.0
+
+        z_charge = min(max(0.0, z_capacity - z_usable), charge_needed)
+
+        return NightEnergyAssessment(
+            bridge_covered=bridge_covered,
+            evening_covered=evening_covered,
+            charge_needed_kwh=charge_needed,
+            z_charge_kwh=z_charge,
+            projected_at_5=projected_at_5,
+            battery_at_18=battery_at_18,
+            evening_need=evening_need,
+        )
+
+    # --------------------------------------------------
+    # Profitabilitätsprüfung (EnWG 14a Modul 3 vorbereitet)
+    # --------------------------------------------------
+
+    def discharge_is_profitable(self, ctx: DecisionContext) -> bool:
+        """True wenn Entladen nach Wandlungsverlusten profitabel ist.
+
+        Break-Even = avg_charge_price / round_trip_efficiency.
+        Entladen lohnt sich nur wenn price_now > Break-Even.
+
+        Fallback ohne avg_charge_price: price_now >= very_expensive_threshold
+        (entspricht dem früheren PeakRule-Verhalten für das 00–05-Fenster).
+
+        Relevant für EnWG 14a Modul 3: bekannte Niedertarif-Einkaufspreise
+        machen den Break-Even-Vergleich besonders wichtig.
+        """
+        if ctx.price_now is None:
+            return False
+        if ctx.avg_charge_price is None:
+            return ctx.price_now >= ctx.very_expensive_threshold
+        break_even = ctx.avg_charge_price / self._round_trip_efficiency
+        return ctx.price_now > break_even
+
+    # --------------------------------------------------
+    # Hauptentscheidung
+    # --------------------------------------------------
+
+    def evaluate(
+        self,
+        engine: "DecisionEngine",
+        ctx: DecisionContext,
+    ) -> Optional[DecisionResult]:
+        """Entscheidung für das GO-Fenster (00–05 Uhr).
+
+        Gibt None zurück wenn ManualRule übernehmen soll (manual + charge/discharge).
+        In allen anderen Fällen: immer ein vollständiges DecisionResult.
+        """
+        # Manuelles Laden/Entladen: ManualRule übernimmt
+        if ctx.ai_mode == "manual" and ctx.manual_action not in (
+            "", "standby", "constant_discharge"
+        ):
+            return None
+
+        self.last_assessment = self.assess(ctx)
+        a = self.last_assessment
+
+        # ── Schutz hat absolute Priorität ──────────────────────────────────────
+        if not a.bridge_covered or not a.evening_covered:
+            if engine._byd_blocks_charge(ctx):
+                return DecisionResult(
+                    action="idle", ac_mode="input",
+                    charge_w=0.0, discharge_w=0.0,
+                    reason="night_charge_byd_discharging",
+                )
+            if ctx.max_charge_w <= 0:
+                return DecisionResult(
+                    action="idle", ac_mode="input",
+                    charge_w=0.0, discharge_w=0.0,
+                    reason="night_charge_no_capacity",
+                )
+            if a.z_charge_kwh >= 0.2:
+                return DecisionResult(
+                    action="charge", ac_mode="input",
+                    charge_w=ctx.max_charge_w, discharge_w=0.0,
+                    reason="night_charge_go_window",
+                )
+            return DecisionResult(
+                action="idle", ac_mode="input",
+                charge_w=0.0, discharge_w=0.0,
+                reason="night_charge_pause",
+            )
+
+        # ── Brücke + Abend gedeckt ──────────────────────────────────────────────
+        if ctx.night_charge_required or ctx.night_charge_active:
+            # BYD lädt noch oder Bedarf aus letztem Zyklus → Zendure halten
+            return DecisionResult(
+                action="idle", ac_mode="input",
+                charge_w=0.0, discharge_w=0.0,
+                reason="night_charge_pause",
+            )
+
+        # ── Entladen: nur wenn nach Wandlungsverlusten profitabel ──────────────
+        if (
+            not engine._byd_blocks_discharge(ctx)
+            and not engine._wallbox_blocks_discharge(ctx)
+            and not engine._bridge_reserve_blocks_discharge(ctx)
+            and ctx.soc > ctx.soc_min + 5
+            and self.discharge_is_profitable(ctx)
+        ):
+            discharge_w = engine._delta_discharge(ctx)
+            if discharge_w > 0:
+                return DecisionResult(
+                    action="discharge", ac_mode="output",
+                    charge_w=0.0, discharge_w=discharge_w,
+                    reason="night_discharge_profitable",
+                )
+
+        return DecisionResult(
+            action="idle", ac_mode="input",
+            charge_w=0.0, discharge_w=0.0,
+            reason="night_no_intervention_needed",
+        )
+
+
+# ==================================================
 # ENGINE
 # ==================================================
 
 class DecisionEngine:
-    def __init__(self):
+    def __init__(self, night_controller: NightWindowController) -> None:
+        self._night_controller = night_controller
         self._rules = [
             EmergencyRule(),
-            AdditionalBatteryBlockRule(),
             PeakRule(),
-            ArbitrageRule(),
             PlanningRule(),
-            ValleyBoostRule(),
             PvRule(),
             SummerRule(),
             ManualRule(),
         ]
+        self._planning_result: Optional[DecisionResult] = None  # per-cycle cache
 
     # -------------------------------------------------
     # Helper methods
     # -------------------------------------------------
 
+    _EXPORT_THRESHOLD_W: float = 100.0
+
+    def _is_real_export(self, ctx: DecisionContext) -> bool:
+        """True wenn Netto-Export > 100W (Zähler exportiert signifikant ins Netz)."""
+        net = ctx.grid_import_w - ctx.grid_export_w
+        return net < -self._EXPORT_THRESHOLD_W
+
+    def _byd_blocks_discharge(self, ctx: DecisionContext) -> bool:
+        """BYD lädt → Zendure darf nicht entladen (Energie-Loop verhindern)."""
+        return float(ctx.additional_battery_charge_w or 0.0) > 0.0
+
+    def _byd_blocks_charge(self, ctx: DecisionContext) -> bool:
+        """BYD entlädt → Zendure darf nicht laden (Energie-Loop verhindern).
+        Schwellwert 120 W filtert kurze Lastimpulse und Messrauschen heraus."""
+        return float(ctx.additional_battery_discharge_w or 0.0) > 120.0
+
+    def _wallbox_blocks_discharge(self, ctx: DecisionContext) -> bool:
+        """Wallbox lädt → Zendure darf nicht entladen (nur wenn Schalter aktiv)."""
+        if not ctx.wallbox_block_enabled:
+            return False
+        return float(ctx.wallbox_active_w or 0.0) > 0.0
+
+    def _bridge_reserve_blocks_discharge(self, ctx: DecisionContext) -> bool:
+        """Safety-Guard: Im GO-Fenster (00–05 Uhr lokal) kein Entladen wenn
+        kombinierte Kapazität ≤ bridge_kwh — Brückenzeit (05–08 Uhr) wäre nicht mehr
+        abdeckbar. NightChargeRule greift bei vorgelagerter Gefährdung bereits ein."""
+        if not (0 <= ctx.now.hour < 5):
+            return False
+        z_usable = max(0.0, (ctx.soc - ctx.soc_min) / 100.0 * ctx.battery_capacity_kwh)
+        byd_usable = (
+            max(0.0, ctx.additional_battery_soc / 100.0 * ctx.additional_battery_capacity_kwh)
+            if ctx.additional_battery_soc >= 0 and ctx.additional_battery_capacity_kwh > 0
+            else 0.0
+        )
+        return (z_usable + byd_usable) <= ctx.bridge_kwh
+
     def _compute_base_price(self, prices: List[float]) -> float:
-        return sum(prices) / len(prices)
+        avg_price = sum(prices) / len(prices)
+        median_price = statistics.median(prices)
+        return min(avg_price, median_price)
 
     def _compute_peak_threshold(self, prices: List[float], peak_factor: float) -> float:
         base_price = self._compute_base_price(prices)
-        return max(
-            base_price * peak_factor,
-            base_price + 0.03,
-        )
+        return base_price * peak_factor
 
     def _compute_valley_threshold(self, prices: List[float], valley_factor: float) -> float:
         base_price = self._compute_base_price(prices)
@@ -392,18 +639,82 @@ class DecisionEngine:
         return False
 
     # -------------------------------------------------
+    # PV-Forecast-basierte Ziel-SoC-Berechnung (v3.2)
+    # -------------------------------------------------
+
+    def _calc_pv_aware_zendure_target_soc(self, ctx: DecisionContext) -> Optional[float]:
+        """Berechnet den PV-bewussten Zendure-Ziel-SoC.
+
+        Gibt None zurück wenn:
+        - Feature deaktiviert (pv_forecast_kwh < 0)
+        - Sensor nicht verfügbar
+
+        Formeln:
+            z_usable    = max(0; (soc - soc_min) / 100 × battery_capacity_kwh)
+            byd_usable  = max(0; additional_battery_soc / 100 × additional_battery_capacity_kwh)
+            z_capacity  = battery_capacity_kwh × (soc_max - soc_min) / 100
+            total_max   = z_capacity + additional_battery_capacity_kwh
+            _pv_for_battery = max(0; pv_forecast_kwh - pv_self_consumption_kwh)
+            target_total = min(total_max; bridge_kwh + nighttime_kwh + max(0; daily_consumption_kwh - _pv_for_battery))
+            charge_needed = max(0; target_total - (z_usable + byd_usable))
+            z_charge    = min(z_capacity - z_usable; charge_needed)
+            z_target_soc = min(soc_max; soc + z_charge / battery_capacity_kwh × 100)
+
+        Hinweis: Verwendet den vollen Tages-/Nachthorizont (inkl. nighttime_kwh) für
+        die Tagesplanung (adaptive_planning). NightChargeRule verwendet projected_at_5
+        und battery_at_18 statt dieses SoC-Zielwerts.
+        """
+        if ctx.pv_forecast_kwh < 0:
+            return None  # Feature deaktiviert oder Sensor unavailable
+
+        z_usable = max(0.0, (ctx.soc - ctx.soc_min) / 100.0 * ctx.battery_capacity_kwh)
+
+        byd_usable = 0.0
+        if ctx.additional_battery_soc >= 0 and ctx.additional_battery_capacity_kwh > 0:
+            byd_usable = max(0.0, ctx.additional_battery_soc / 100.0 * ctx.additional_battery_capacity_kwh)
+
+        total_avail = z_usable + byd_usable
+
+        z_capacity = ctx.battery_capacity_kwh * (ctx.soc_max - ctx.soc_min) / 100.0
+        total_max = z_capacity + ctx.additional_battery_capacity_kwh
+
+        _pv_for_battery = max(0.0, ctx.pv_forecast_kwh - ctx.pv_self_consumption_kwh)
+        target_total = min(
+            total_max,
+            ctx.bridge_kwh + ctx.nighttime_kwh + max(0.0, ctx.daily_consumption_kwh - _pv_for_battery),
+        )
+
+        charge_needed = max(0.0, target_total - total_avail)
+        z_charge = min(max(0.0, z_capacity - z_usable), charge_needed)
+
+        z_target_soc = min(
+            ctx.soc_max,
+            ctx.soc + z_charge / ctx.battery_capacity_kwh * 100.0,
+        )
+        return round(z_target_soc, 1)
+
+    # -------------------------------------------------
     # Adaptive planning
     # -------------------------------------------------
 
     def _evaluate_adaptive_planning(self, ctx: DecisionContext) -> Optional[DecisionResult]:
         if (
-            ctx.ai_mode not in ("automatic", "winter")
+            ctx.ai_mode not in ("automatic", "winter", "summer")
             or not ctx.price_points
             or ctx.price_now is None
-            or ctx.soc >= ctx.soc_max
             or ctx.battery_capacity_kwh <= 0
             or ctx.max_charge_w <= 0
         ):
+            return None
+
+        # PV-aware effective_soc_max: ersetzt ctx.soc_max wenn Feature aktiv
+        effective_soc_max = ctx.soc_max
+        pv_target = self._calc_pv_aware_zendure_target_soc(ctx)
+        if pv_target is not None:
+            effective_soc_max = pv_target
+
+        # Guard: Bereits am Ziel? (0.1% Toleranz gegen Float-Rundung)
+        if ctx.soc >= effective_soc_max - 0.1:
             return None
 
         prices = [p.price for p in ctx.price_points]
@@ -457,7 +768,7 @@ class DecisionEngine:
         future_peaks_sorted = sorted(future_peaks, key=lambda p: p.start)
         second_peak = future_peaks_sorted[1].start if len(future_peaks_sorted) >= 2 else None
 
-        soc_gap_pct = max(0.0, ctx.soc_max - ctx.soc)
+        soc_gap_pct = max(0.0, effective_soc_max - ctx.soc)
         required_kwh = ctx.battery_capacity_kwh * (soc_gap_pct / 100.0)
 
         # ------------------------------------------------
@@ -516,7 +827,7 @@ class DecisionEngine:
                 charge_w=ctx.max_charge_w,
                 discharge_w=0.0,
                 reason="planning_latest_start",
-                target_soc=ctx.soc_max,
+                target_soc=effective_soc_max,
             )
 
         return None
@@ -526,15 +837,41 @@ class DecisionEngine:
     # -------------------------------------------------
 
     def evaluate(self, ctx: DecisionContext) -> DecisionResult:
-        for rule in self._rules:
-            result = rule.evaluate(self, ctx)
-            if result:
-                return result
+        self._planning_result = self._evaluate_adaptive_planning(ctx)
 
-        return DecisionResult(
-            action="idle",
-            ac_mode="input",
-            charge_w=0.0,
-            discharge_w=0.0,
-            reason="idle",
-        )
+        # Außerhalb des Nacht-Fensters: Assessment zurücksetzen
+        if not (0 <= ctx.now.hour < 5):
+            self._night_controller.last_assessment = None
+
+        try:
+            # Night window: Controller ownt 00–05 vollständig
+            if 0 <= ctx.now.hour < 5:
+                result = self._night_controller.evaluate(self, ctx)
+                if result is not None:
+                    _LOGGER.debug(
+                        "NightWindowController → %s (%s)", result.action, result.reason,
+                    )
+                    return result
+                _LOGGER.debug("NightWindowController → pass (manual override)")
+
+            # Normal chain (tagsüber oder nach manual pass-through)
+            for rule in self._rules:
+                result = rule.evaluate(self, ctx)
+                if result is not None:
+                    _LOGGER.debug(
+                        "Rule %s → %s (%s)",
+                        rule.__class__.__name__, result.action, result.reason,
+                    )
+                    return result
+                _LOGGER.debug("Rule %s → pass", rule.__class__.__name__)
+
+            _LOGGER.debug("All rules passed → idle")
+            return DecisionResult(
+                action="idle",
+                ac_mode="input",
+                charge_w=0.0,
+                discharge_w=0.0,
+                reason="idle",
+            )
+        finally:
+            self._planning_result = None

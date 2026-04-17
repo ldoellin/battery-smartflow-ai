@@ -34,7 +34,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         coordinator = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-        if coordinator:
+        if coordinator and hasattr(coordinator, "async_shutdown"):
             await coordinator.async_shutdown()
     return unload_ok
 

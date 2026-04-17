@@ -13,6 +13,8 @@ from .const import (
     CONF_PV_ENTITY,
     CONF_BATTERY_AC_POWER_ENTITY,
     CONF_ADDITIONAL_BATTERY_CHARGE_ENTITY,
+    CONF_ADDITIONAL_BATTERY_DISCHARGE_ENTITY,
+    CONF_WALLBOX_POWER_ENTITY,
     CONF_PRICE_EXPORT_ENTITY,
     CONF_PRICE_NOW_ENTITY,
     CONF_AC_MODE_ENTITY,
@@ -33,6 +35,17 @@ from .const import (
     CONF_PROFILE_OVERRIDES,
     CONF_INSTALLED_PV_WP,
     DEFAULT_INSTALLED_PV_WP,
+    # PV-Forecast (v3.2)
+    CONF_PV_FORECAST_ENTITY,
+    CONF_PV_DAILY_YIELD_ENTITY,
+    CONF_ADDITIONAL_BATTERY_SOC_ENTITY,
+    CONF_ADDITIONAL_BATTERY_CAPACITY_KWH,
+    CONF_ADDITIONAL_BATTERY_MODE_ENTITY,
+    CONF_ADDITIONAL_BATTERY_POWER_ENTITY,
+    CONF_ADDITIONAL_BATTERY_CHARGE_MODE,
+    CONF_ADDITIONAL_BATTERY_STOP_MODE,
+    CONF_ADDITIONAL_BATTERY_PAUSE_MODE,
+    DEFAULT_ADDITIONAL_BATTERY_CAPACITY_KWH,
 )
 
 from .device_profiles import DEVICE_PROFILES, PROFILE_OVERRIDE_FIELDS
@@ -78,6 +91,27 @@ class ZendureSmartFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not self._user_input.get(CONF_ADDITIONAL_BATTERY_CHARGE_ENTITY):
                 self._user_input.pop(CONF_ADDITIONAL_BATTERY_CHARGE_ENTITY, None)
+
+            if not self._user_input.get(CONF_ADDITIONAL_BATTERY_DISCHARGE_ENTITY):
+                self._user_input.pop(CONF_ADDITIONAL_BATTERY_DISCHARGE_ENTITY, None)
+
+            if not self._user_input.get(CONF_WALLBOX_POWER_ENTITY):
+                self._user_input.pop(CONF_WALLBOX_POWER_ENTITY, None)
+
+            if not self._user_input.get(CONF_PV_FORECAST_ENTITY):
+                self._user_input.pop(CONF_PV_FORECAST_ENTITY, None)
+
+            if not self._user_input.get(CONF_PV_DAILY_YIELD_ENTITY):
+                self._user_input.pop(CONF_PV_DAILY_YIELD_ENTITY, None)
+
+            if not self._user_input.get(CONF_ADDITIONAL_BATTERY_SOC_ENTITY):
+                self._user_input.pop(CONF_ADDITIONAL_BATTERY_SOC_ENTITY, None)
+
+            if not self._user_input.get(CONF_ADDITIONAL_BATTERY_MODE_ENTITY):
+                self._user_input.pop(CONF_ADDITIONAL_BATTERY_MODE_ENTITY, None)
+
+            if not self._user_input.get(CONF_ADDITIONAL_BATTERY_POWER_ENTITY):
+                self._user_input.pop(CONF_ADDITIONAL_BATTERY_POWER_ENTITY, None)
 
             if grid_mode != GRID_MODE_SINGLE:
                 self._user_input.pop(CONF_GRID_POWER_ENTITY, None)
@@ -150,6 +184,27 @@ class ZendureSmartFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not cleaned.get(CONF_ADDITIONAL_BATTERY_CHARGE_ENTITY):
                 cleaned.pop(CONF_ADDITIONAL_BATTERY_CHARGE_ENTITY, None)
 
+            if not cleaned.get(CONF_ADDITIONAL_BATTERY_DISCHARGE_ENTITY):
+                cleaned.pop(CONF_ADDITIONAL_BATTERY_DISCHARGE_ENTITY, None)
+
+            if not cleaned.get(CONF_WALLBOX_POWER_ENTITY):
+                cleaned.pop(CONF_WALLBOX_POWER_ENTITY, None)
+
+            if not cleaned.get(CONF_PV_FORECAST_ENTITY):
+                cleaned.pop(CONF_PV_FORECAST_ENTITY, None)
+
+            if not cleaned.get(CONF_PV_DAILY_YIELD_ENTITY):
+                cleaned.pop(CONF_PV_DAILY_YIELD_ENTITY, None)
+
+            if not cleaned.get(CONF_ADDITIONAL_BATTERY_SOC_ENTITY):
+                cleaned.pop(CONF_ADDITIONAL_BATTERY_SOC_ENTITY, None)
+
+            if not cleaned.get(CONF_ADDITIONAL_BATTERY_MODE_ENTITY):
+                cleaned.pop(CONF_ADDITIONAL_BATTERY_MODE_ENTITY, None)
+
+            if not cleaned.get(CONF_ADDITIONAL_BATTERY_POWER_ENTITY):
+                cleaned.pop(CONF_ADDITIONAL_BATTERY_POWER_ENTITY, None)
+
             if not errors:
                 return self.async_update_reload_and_abort(
                     entry,
@@ -163,8 +218,8 @@ class ZendureSmartFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    @staticmethod
-    def async_get_options_flow(config_entry: config_entries.ConfigEntry):
+    @classmethod
+    def async_get_options_flow(cls, config_entry: config_entries.ConfigEntry):
         return ZendureSmartFlowOptionsFlow()
 
     def _base_schema(
@@ -232,8 +287,8 @@ class ZendureSmartFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema[
             vol.Optional(
-                CONF_INSTALLED_PV_WP, 
-                default =_val(CONF_INSTALLED_PV_WP) or DEFAULT_INSTALLED_PV_WP,
+                CONF_INSTALLED_PV_WP,
+                default=_val(CONF_INSTALLED_PV_WP) or DEFAULT_INSTALLED_PV_WP,
             )
         ] = selector.NumberSelector(
             selector.NumberSelectorConfig(
@@ -244,7 +299,7 @@ class ZendureSmartFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 unit_of_measurement="Wp",
             )
         )
-        
+
         schema[
             vol.Required(CONF_PV_ENTITY, default=_val(CONF_PV_ENTITY))
         ] = selector.EntitySelector(
@@ -276,6 +331,148 @@ class ZendureSmartFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ] = selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor")
             )
+
+        additional_battery_discharge_val = _val(CONF_ADDITIONAL_BATTERY_DISCHARGE_ENTITY)
+        if additional_battery_discharge_val:
+            schema[
+                vol.Optional(
+                    CONF_ADDITIONAL_BATTERY_DISCHARGE_ENTITY,
+                    default=additional_battery_discharge_val,
+                )
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+        else:
+            schema[
+                vol.Optional(CONF_ADDITIONAL_BATTERY_DISCHARGE_ENTITY)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+
+        wallbox_val = _val(CONF_WALLBOX_POWER_ENTITY)
+        if wallbox_val:
+            schema[
+                vol.Optional(
+                    CONF_WALLBOX_POWER_ENTITY,
+                    default=wallbox_val,
+                )
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+        else:
+            schema[
+                vol.Optional(CONF_WALLBOX_POWER_ENTITY)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+
+        # --- PV-Forecast-basierte Nachtladung (v3.2) ---
+
+        pv_forecast_val = _val(CONF_PV_FORECAST_ENTITY)
+        if pv_forecast_val:
+            schema[
+                vol.Optional(CONF_PV_FORECAST_ENTITY, default=pv_forecast_val)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+        else:
+            schema[
+                vol.Optional(CONF_PV_FORECAST_ENTITY)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+
+        pv_yield_val = _val(CONF_PV_DAILY_YIELD_ENTITY)
+        if pv_yield_val:
+            schema[
+                vol.Optional(CONF_PV_DAILY_YIELD_ENTITY, default=pv_yield_val)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+        else:
+            schema[
+                vol.Optional(CONF_PV_DAILY_YIELD_ENTITY)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+
+        byd_soc_val = _val(CONF_ADDITIONAL_BATTERY_SOC_ENTITY)
+        if byd_soc_val:
+            schema[
+                vol.Optional(CONF_ADDITIONAL_BATTERY_SOC_ENTITY, default=byd_soc_val)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+        else:
+            schema[
+                vol.Optional(CONF_ADDITIONAL_BATTERY_SOC_ENTITY)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+
+        schema[
+            vol.Optional(
+                CONF_ADDITIONAL_BATTERY_CAPACITY_KWH,
+                default=_val(CONF_ADDITIONAL_BATTERY_CAPACITY_KWH)
+                or DEFAULT_ADDITIONAL_BATTERY_CAPACITY_KWH,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0.0,
+                max=200.0,
+                step=0.1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
+        byd_mode_val = _val(CONF_ADDITIONAL_BATTERY_MODE_ENTITY)
+        if byd_mode_val:
+            schema[
+                vol.Optional(CONF_ADDITIONAL_BATTERY_MODE_ENTITY, default=byd_mode_val)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="input_select")
+            )
+        else:
+            schema[
+                vol.Optional(CONF_ADDITIONAL_BATTERY_MODE_ENTITY)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="input_select")
+            )
+
+        byd_power_val = _val(CONF_ADDITIONAL_BATTERY_POWER_ENTITY)
+        if byd_power_val:
+            schema[
+                vol.Optional(CONF_ADDITIONAL_BATTERY_POWER_ENTITY, default=byd_power_val)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="input_number")
+            )
+        else:
+            schema[
+                vol.Optional(CONF_ADDITIONAL_BATTERY_POWER_ENTITY)
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="input_number")
+            )
+
+        schema[
+            vol.Optional(
+                CONF_ADDITIONAL_BATTERY_CHARGE_MODE,
+                default=_val(CONF_ADDITIONAL_BATTERY_CHARGE_MODE) or "Laden",
+            )
+        ] = selector.TextSelector()
+
+        schema[
+            vol.Optional(
+                CONF_ADDITIONAL_BATTERY_STOP_MODE,
+                default=_val(CONF_ADDITIONAL_BATTERY_STOP_MODE) or "Automatik",
+            )
+        ] = selector.TextSelector()
+
+        schema[
+            vol.Optional(
+                CONF_ADDITIONAL_BATTERY_PAUSE_MODE,
+                default=_val(CONF_ADDITIONAL_BATTERY_PAUSE_MODE) or "Pause",
+            )
+        ] = selector.TextSelector()
 
         price_export_val = _val(CONF_PRICE_EXPORT_ENTITY)
         if price_export_val:
@@ -522,6 +719,15 @@ class ZendureSmartFlowOptionsFlow(config_entries.OptionsFlow):
                         unit_of_measurement="W",
                     )
                 ),
+                vol.Optional("SOC_DISCHARGE_RESUME_MARGIN"): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0.0,
+                        max=15.0,
+                        step=0.5,
+                        mode=selector.NumberSelectorMode.BOX,
+                        unit_of_measurement="%",
+                    )
+                ),
             }
         )
 
@@ -562,6 +768,10 @@ class ZendureSmartFlowOptionsFlow(config_entries.OptionsFlow):
             "KEEPALIVE_MIN_OUTPUT_W": current_overrides.get(
                 "KEEPALIVE_MIN_OUTPUT_W",
                 profile.get("KEEPALIVE_MIN_OUTPUT_W"),
+            ),
+            "SOC_DISCHARGE_RESUME_MARGIN": current_overrides.get(
+                "SOC_DISCHARGE_RESUME_MARGIN",
+                profile.get("SOC_DISCHARGE_RESUME_MARGIN"),
             ),
         }
 

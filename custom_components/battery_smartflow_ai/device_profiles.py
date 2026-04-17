@@ -73,6 +73,14 @@ PROFILE_OVERRIDE_FIELDS = {
         "unit": "W",
         "icon": "mdi:flash",
     },
+    "SOC_DISCHARGE_RESUME_MARGIN": {
+        "label": "SoC Wiederfreigabe-Margin",
+        "min": 0.0,
+        "max": 15.0,
+        "step": 0.5,
+        "unit": "%",
+        "icon": "mdi:battery-sync",
+    },
 }
 
 # Optional: diese Felder sollen zwar sichtbar, aber nicht editierbar sein
@@ -95,10 +103,13 @@ SF800PRO_PROFILE = {
     "MAX_STEP_DOWN": 400.0,
     "KEEPALIVE_MIN_DEFICIT_W": 15.0,
     "KEEPALIVE_MIN_OUTPUT_W": 60.0,
+    "SOC_DISCHARGE_RESUME_MARGIN": 3.0,
 
     # --- Hardware limits (safety clamp) ---
     "MAX_INPUT_W": 1000.0,
     "MAX_OUTPUT_W": 800.0,
+    # --- Effizienz (für Break-Even-Berechnung EnWG 14a) ---
+    "ROUND_TRIP_EFFICIENCY": 0.90,
 }
 
 SF2400AC_PROFILE = {
@@ -115,10 +126,13 @@ SF2400AC_PROFILE = {
     "MAX_STEP_DOWN": 800.0,
     "KEEPALIVE_MIN_DEFICIT_W": 15.0,
     "KEEPALIVE_MIN_OUTPUT_W": 60.0,
+    "SOC_DISCHARGE_RESUME_MARGIN": 3.0,
 
     # --- Hardware limits (safety clamp) ---
     "MAX_INPUT_W": 2400.0,
     "MAX_OUTPUT_W": 2400.0,
+    # --- Effizienz (für Break-Even-Berechnung EnWG 14a) ---
+    "ROUND_TRIP_EFFICIENCY": 0.92,
 }
 
 SF1600AC_PROFILE = {
@@ -135,10 +149,13 @@ SF1600AC_PROFILE = {
     "MAX_STEP_DOWN": 900.0,
     "KEEPALIVE_MIN_DEFICIT_W": 15.0,
     "KEEPALIVE_MIN_OUTPUT_W": 60.0,
+    "SOC_DISCHARGE_RESUME_MARGIN": 3.0,
 
     # --- Hardware limits (safety clamp) ---
     "MAX_INPUT_W": 1600.0,
     "MAX_OUTPUT_W": 1600.0,
+    # --- Effizienz (für Break-Even-Berechnung EnWG 14a) ---
+    "ROUND_TRIP_EFFICIENCY": 0.91,
 }
 
 HYPER2000_PROFILE = {
@@ -155,10 +172,13 @@ HYPER2000_PROFILE = {
     "MAX_STEP_DOWN": 800.0,
     "KEEPALIVE_MIN_DEFICIT_W": 15.0,
     "KEEPALIVE_MIN_OUTPUT_W": 60.0,
+    "SOC_DISCHARGE_RESUME_MARGIN": 3.0,
 
     # --- Hardware limits (safety clamp) ---
     "MAX_INPUT_W": 1200.0,
     "MAX_OUTPUT_W": 1200.0,
+    # --- Effizienz (für Break-Even-Berechnung EnWG 14a) ---
+    "ROUND_TRIP_EFFICIENCY": 0.92,
 }
 
 DEVICE_PROFILES = {
