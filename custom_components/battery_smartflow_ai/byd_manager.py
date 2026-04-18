@@ -98,9 +98,9 @@ class BydNightChargeManager:
 
         Gibt -1.0 zurück wenn Feature deaktiviert.
         """
-        pv_forecast_enabled = float(
+        pv_forecast_enabled = bool(
             self._runtime_settings.get(SETTING_PV_FORECAST_ENABLED, DEFAULT_PV_FORECAST_ENABLED)
-        ) >= 1.0
+        )
 
         if not pv_forecast_enabled:
             return -1.0
@@ -147,7 +147,7 @@ class BydNightChargeManager:
         """
         # Außerhalb des Nacht-Fensters: Sicherheitsstopp falls noch aktiv + Pause aufheben
         if not (0 <= now.hour < 5):
-            self._persist.pop("night_soc_snapshot", None)  # Für nächste Nacht zurücksetzen
+            self._persist.pop("night_soc_snapshot", None)
             if self.night_active:
                 _LOGGER.info("SmartFlow Nachtladen: Fenster 05:00 überschritten – BYD → %s", self._stop_mode)
                 await self._set_mode(self._stop_mode)
@@ -160,8 +160,6 @@ class BydNightChargeManager:
 
         # Nur in Betriebsmodi, in denen auch NightChargeRule aktiv ist.
         if ctx.ai_mode not in ("automatic", "winter", "summer", "manual"):
-            # Modus-Wechsel WÄHREND des GO-Fensters: BYD-Flags zurücksetzen,
-            # damit BYD nicht im Lade- oder Pause-Zustand stecken bleibt.
             if self.night_active:
                 _LOGGER.info(
                     "SmartFlow Nachtladen: Modus wechselte zu %s während GO-Fenster – BYD → %s",
@@ -182,116 +180,31 @@ class BydNightChargeManager:
         if not self.entities.additional_battery_mode:
             return
 
-        # Energiebilanz vom NightWindowController übernehmen (keine Duplikation)
-        charge_needed = assessment.charge_needed_kwh if assessment else 0.0
-        z_charge      = assessment.z_charge_kwh      if assessment else 0.0
-        bridge_covered = assessment.bridge_covered    if assessment else True
-        byd_charge = max(0.0, charge_needed - z_charge)
+        (byd_target_soc, z_target_soc, byd_charge, bridge_covered,
+         current_byd_soc, byd_actual_kwh, zendure_actual_kwh, z_charge) = self._calc_targets(ctx, assessment)
 
-        current_byd_soc = ctx.additional_battery_soc if ctx.additional_battery_soc >= 0 else 0.0
-
-        # Snapshot SoC zu Fensterbeginn (einmal pro Nacht, beim ersten Aufruf im GO-Fenster)
-        if "night_soc_snapshot" not in self._persist:
-            self._persist["night_soc_snapshot"] = {
-                "byd": current_byd_soc,
-                "zendure": ctx.soc,
-            }
-        _snap = self._persist["night_soc_snapshot"]
-        byd_actual_kwh = (
-            max(0.0, (current_byd_soc - _snap["byd"]) / 100.0 * ctx.additional_battery_capacity_kwh)
-            if ctx.additional_battery_capacity_kwh > 0 else 0.0
-        )
-        zendure_actual_kwh = max(0.0, (ctx.soc - _snap["zendure"]) / 100.0 * ctx.battery_capacity_kwh)
-
-        # BYD Ziel-SoC berechnen
-        byd_target_soc = current_byd_soc
-        if ctx.additional_battery_capacity_kwh > 0:
-            byd_target_soc = min(
-                100.0,
-                current_byd_soc + byd_charge / ctx.additional_battery_capacity_kwh * 100.0,
-            )
-
-        # Zendure Ziel-SoC berechnen (für Dashboard-Transparenz)
-        z_target_soc = ctx.soc
-        if ctx.battery_capacity_kwh > 0:
-            z_target_soc = min(ctx.soc_max, ctx.soc + z_charge / ctx.battery_capacity_kwh * 100.0)
-
-        # Aktuellen BYD-Modus lesen
         current_mode = self._state(self.entities.additional_battery_mode)
 
-        # Status und Modus ermitteln (no-need-Zweig mit Entladeschutz)
-        if current_byd_soc >= byd_target_soc - 0.5 or byd_charge < 0.5:
-            # Ziel erreicht oder kein BYD-Ladebedarf
-            was_night_active = self.night_active   # merken VOR Reset (Fix 2)
-            self.night_active = False
+        night_status, mode_to_set = self._decide_byd_mode(
+            byd_charge=byd_charge,
+            bridge_covered=bridge_covered,
+            current_mode=current_mode,
+            byd_target_soc=byd_target_soc,
+            current_byd_soc=current_byd_soc,
+            z_charge=z_charge,
+        )
+        if mode_to_set is not None:
+            await self._set_mode(mode_to_set)
 
-            if z_charge >= 0.2:
-                # Zendure lädt noch → BYD pausieren damit keine Kreuzladung entsteht.
-                # Ausnahme: BYD lädt bereits (manuell oder durch Manager) → nicht unterbrechen.
-                byd_already_charging = current_mode in (self._charge_mode, "Nachtladen")
-                if not byd_already_charging and current_mode != self._pause_mode:
-                    _LOGGER.info(
-                        "SmartFlow Nachtladen: Zendure lädt noch (%.2f kWh) → BYD pausieren",
-                        z_charge,
-                    )
-                    await self._set_mode(self._pause_mode)
-                    self.discharge_paused = True
-                night_status = "discharge_paused"
-            elif not bridge_covered:
-                # Brückenreserve schützen: Assessment meldet Brücke nicht gesichert.
-                # Ausnahme: BYD lädt bereits → Energie steigt, Schutz nicht nötig.
-                byd_already_charging = current_mode in (self._charge_mode, "Nachtladen")
-                if not byd_already_charging and current_mode != self._pause_mode:
-                    _LOGGER.info(
-                        "SmartFlow Nachtladen: Brücke nicht gesichert (Assessment) → %s",
-                        self._pause_mode,
-                    )
-                    await self._set_mode(self._pause_mode)
-                    self.discharge_paused = True
-                night_status = "discharge_paused"
-            else:
-                # BYD hat mehr als Bridge → Entladung erlaubt
-                # Nur zurücksetzen wenn WIR den Modus gesetzt haben (Fix 2)
-                if current_mode in (self._charge_mode, self._pause_mode):
-                    if was_night_active or self.discharge_paused:
-                        _LOGGER.info(
-                            "SmartFlow Nachtladen: BYD Ziel %.0f%% erreicht (aktuell %.0f%%) → %s",
-                            byd_target_soc, current_byd_soc, self._stop_mode,
-                        )
-                        await self._set_mode(self._stop_mode)
-                        self.discharge_paused = False
-                night_status = "no_need" if byd_charge < 0.5 else "goal_reached"
-        else:
-            night_status = "charging"
-
-        # Nachtlade-Plan persistieren (überlebt HA-Neustart, sichtbar am nächsten Morgen)
-        night_plan: dict[str, Any] = {
-            "status": night_status,
-            "pv_kwh": round(ctx.pv_forecast_kwh, 2),
-            "byd_ziel_soc": round(byd_target_soc, 1),
-            "byd_laden_kwh": round(byd_actual_kwh, 2),
-            "byd_leistung_w": self._persist.get("night_plan", {}).get("byd_leistung_w"),
-            "zendure_ziel_soc": round(z_target_soc, 1),
-            "zendure_laden_kwh": round(zendure_actual_kwh, 2),
-            "timestamp": now.strftime("%H:%M %d.%m.%Y"),
-        }
-        self._persist["night_plan"] = night_plan
-
+        byd_power_w: int | None = None
         if night_status == "charging":
-            # Ladeleistung jede Runde neu berechnen (schrumpfende Restzeit berücksichtigen)
             remaining_h = max(0.25, 5.0 - now.hour - now.minute / 60.0)
-            byd_power = int(
-                min(3600, max(500, round(byd_charge / remaining_h * 10) * 100))
-            )
-            night_plan["byd_leistung_w"] = byd_power
-            self._persist["night_plan"] = night_plan
+            byd_power_w = int(min(3600, max(500, round(byd_charge / remaining_h * 10) * 100)))
 
             if current_mode != self._charge_mode:
-                # Ersten Übergang → Modus setzen + Leistung schreiben + loggen
                 _LOGGER.info(
                     "SmartFlow Nachtladen: BYD %.1fkWh laden → Ziel %.0f%%, %dW (%s bleibt)",
-                    byd_charge, byd_target_soc, byd_power,
-                    f"{remaining_h:.1f}h",
+                    byd_charge, byd_target_soc, byd_power_w, f"{remaining_h:.1f}h",
                 )
                 await self._set_mode(self._charge_mode)
 
@@ -299,15 +212,142 @@ class BydNightChargeManager:
                 _last_pw = self._persist.get("last_set_byd_power_w")
                 _last_ts = self._persist.get("last_set_byd_power_ts")
                 _elapsed = (now.timestamp() - _last_ts) if _last_ts is not None else float("inf")
-                if byd_power != _last_pw and _elapsed >= 300:
+                if byd_power_w != _last_pw and _elapsed >= 300:
                     await self.hass.services.async_call(
                         "input_number",
                         "set_value",
-                        {"entity_id": self.entities.additional_battery_power, "value": byd_power},
+                        {"entity_id": self.entities.additional_battery_power, "value": byd_power_w},
                     )
-                    self._persist["last_set_byd_power_w"] = byd_power
+                    self._persist["last_set_byd_power_w"] = byd_power_w
                     self._persist["last_set_byd_power_ts"] = now.timestamp()
             self.night_active = True
+
+        self._persist_night_plan(
+            now=now,
+            night_status=night_status,
+            ctx=ctx,
+            byd_target_soc=byd_target_soc,
+            z_target_soc=z_target_soc,
+            byd_actual_kwh=byd_actual_kwh,
+            zendure_actual_kwh=zendure_actual_kwh,
+            byd_power_w=byd_power_w,
+        )
+
+    def _calc_targets(
+        self,
+        ctx: DecisionContext,
+        assessment: NightEnergyAssessment | None,
+    ) -> tuple[float, float, float, bool, float, float, float, float]:
+        """Berechnet Lade-Ziele aus Assessment und SoC-Snapshot.
+
+        Returns (byd_target_soc, z_target_soc, byd_charge, bridge_covered,
+                 current_byd_soc, byd_actual_kwh, zendure_actual_kwh, z_charge).
+        """
+        charge_needed  = assessment.charge_needed_kwh if assessment else 0.0
+        z_charge       = assessment.z_charge_kwh      if assessment else 0.0
+        bridge_covered = assessment.bridge_covered    if assessment else True
+        byd_charge     = max(0.0, charge_needed - z_charge)
+
+        current_byd_soc = ctx.additional_battery_soc if ctx.additional_battery_soc >= 0 else 0.0
+
+        if "night_soc_snapshot" not in self._persist:
+            self._persist["night_soc_snapshot"] = {"byd": current_byd_soc, "zendure": ctx.soc}
+        _snap = self._persist["night_soc_snapshot"]
+        byd_actual_kwh = (
+            max(0.0, (current_byd_soc - _snap["byd"]) / 100.0 * ctx.additional_battery_capacity_kwh)
+            if ctx.additional_battery_capacity_kwh > 0 else 0.0
+        )
+        zendure_actual_kwh = max(0.0, (ctx.soc - _snap["zendure"]) / 100.0 * ctx.battery_capacity_kwh)
+
+        byd_target_soc = current_byd_soc
+        if ctx.additional_battery_capacity_kwh > 0:
+            byd_target_soc = min(
+                100.0,
+                current_byd_soc + byd_charge / ctx.additional_battery_capacity_kwh * 100.0,
+            )
+
+        z_target_soc = ctx.soc
+        if ctx.battery_capacity_kwh > 0:
+            z_target_soc = min(ctx.soc_max, ctx.soc + z_charge / ctx.battery_capacity_kwh * 100.0)
+
+        return (byd_target_soc, z_target_soc, byd_charge, bridge_covered,
+                current_byd_soc, byd_actual_kwh, zendure_actual_kwh, z_charge)
+
+    def _decide_byd_mode(
+        self,
+        byd_charge: float,
+        bridge_covered: bool,
+        current_mode: str,
+        byd_target_soc: float,
+        current_byd_soc: float,
+        z_charge: float,
+    ) -> tuple[str, str | None]:
+        """Bestimmt (night_status, mode_to_set).
+
+        mode_to_set ist None wenn kein Moduswechsel nötig.
+        Aktualisiert self.night_active und self.discharge_paused.
+        """
+        if current_byd_soc >= byd_target_soc - 0.5 or byd_charge < 0.5:
+            was_night_active = self.night_active
+            self.night_active = False
+
+            if z_charge >= 0.2:
+                byd_already_charging = current_mode in (self._charge_mode, "Nachtladen")
+                if not byd_already_charging and current_mode != self._pause_mode:
+                    _LOGGER.info(
+                        "SmartFlow Nachtladen: Zendure lädt noch (%.2f kWh) → BYD pausieren", z_charge,
+                    )
+                    self.discharge_paused = True
+                    return "discharge_paused", self._pause_mode
+                return "discharge_paused", None
+
+            if not bridge_covered:
+                byd_already_charging = current_mode in (self._charge_mode, "Nachtladen")
+                if not byd_already_charging and current_mode != self._pause_mode:
+                    _LOGGER.info(
+                        "SmartFlow Nachtladen: Brücke nicht gesichert (Assessment) → %s", self._pause_mode,
+                    )
+                    self.discharge_paused = True
+                    return "discharge_paused", self._pause_mode
+                return "discharge_paused", None
+
+            if current_mode in (self._charge_mode, self._pause_mode):
+                if was_night_active or self.discharge_paused:
+                    _LOGGER.info(
+                        "SmartFlow Nachtladen: BYD Ziel %.0f%% erreicht (aktuell %.0f%%) → %s",
+                        byd_target_soc, current_byd_soc, self._stop_mode,
+                    )
+                    self.discharge_paused = False
+                    return "goal_reached" if byd_charge >= 0.5 else "no_need", self._stop_mode
+            return "goal_reached" if byd_charge >= 0.5 else "no_need", None
+
+        return "charging", None
+
+    def _persist_night_plan(
+        self,
+        now: datetime,
+        night_status: str,
+        ctx: DecisionContext,
+        byd_target_soc: float,
+        z_target_soc: float,
+        byd_actual_kwh: float,
+        zendure_actual_kwh: float,
+        byd_power_w: int | None,
+    ) -> None:
+        """Schreibt night_plan in _persist."""
+        self._persist["night_plan"] = {
+            "status": night_status,
+            "pv_kwh": round(ctx.pv_forecast_kwh, 2),
+            "byd_ziel_soc": round(byd_target_soc, 1),
+            "byd_laden_kwh": round(byd_actual_kwh, 2),
+            "byd_leistung_w": (
+                byd_power_w if byd_power_w is not None
+                else self._persist.get("night_plan", {}).get("byd_leistung_w")
+            ),
+            "zendure_ziel_soc": round(z_target_soc, 1),
+            "zendure_laden_kwh": round(zendure_actual_kwh, 2),
+            "timestamp": now.strftime("%H:%M %d.%m.%Y"),
+        }
 
     async def _set_mode(self, mode: str) -> None:
         """Schreibt BYD-Steuermodus auf input_select (nur wenn Entität konfiguriert)."""

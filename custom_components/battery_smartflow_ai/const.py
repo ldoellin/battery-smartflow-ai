@@ -10,7 +10,7 @@ DOMAIN = "battery_smartflow_ai"
 INTEGRATION_NAME = "Battery SmartFlow AI"
 INTEGRATION_MANUFACTURER = "PalmManiac"
 INTEGRATION_MODEL = "Home Assistant Integration"
-INTEGRATION_VERSION = "3.6.0-custom"
+INTEGRATION_VERSION = "4.2.0-custom"
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -247,3 +247,13 @@ NEXT_PLANNED_ACTION_ENUMS = [
 # ==================================================
 ZENDURE_MODE_INPUT = "input"
 ZENDURE_MODE_OUTPUT = "output"
+
+
+def build_device_info(entry_id: str) -> dict:
+    return {
+        "identifiers": {(DOMAIN, entry_id)},
+        "name": INTEGRATION_NAME,
+        "manufacturer": INTEGRATION_MANUFACTURER,
+        "model": INTEGRATION_MODEL,
+        "sw_version": INTEGRATION_VERSION,
+    }

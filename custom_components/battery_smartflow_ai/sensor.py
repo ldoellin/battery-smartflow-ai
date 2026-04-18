@@ -17,10 +17,7 @@ from homeassistant.util import dt as dt_util
 from .device_profiles import DEVICE_PROFILES
 from .const import (
     DOMAIN,
-    INTEGRATION_NAME,
-    INTEGRATION_MANUFACTURER,
-    INTEGRATION_MODEL,
-    INTEGRATION_VERSION,
+    build_device_info,
     STATUS_ENUMS,
     AI_STATUS_ENUMS,
     RECO_ENUMS,
@@ -289,13 +286,7 @@ class ZendureSmartFlowSensor(CoordinatorEntity, SensorEntity):
 
         self._attr_unique_id = f"{DOMAIN}_{entry.entry_id}_{description.key}"
 
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": INTEGRATION_NAME,
-            "manufacturer": INTEGRATION_MANUFACTURER,
-            "model": INTEGRATION_MODEL,
-            "sw_version": INTEGRATION_VERSION,
-        }
+        self._attr_device_info = build_device_info(entry.entry_id)
 
     @property
     def available(self) -> bool:

@@ -89,7 +89,7 @@ class DecisionContext:
     night_charge_active: bool = False     # BYD lädt gerade aktiv (aus letztem BYD-Zyklus)
 
 
-@dataclass
+@dataclass(frozen=True)
 class DecisionResult:
     action: ActionType
     ac_mode: ZendureMode
@@ -403,6 +403,25 @@ class NightWindowController:
             battery_at_18=battery_at_18,
             evening_need=evening_need,
         )
+
+    # --------------------------------------------------
+    # Fenster-Ownership
+    # --------------------------------------------------
+
+    def is_active(self, ctx: DecisionContext) -> bool:
+        """True wenn der Controller das GO-Fenster ownt.
+
+        False wenn ManualRule übernehmen soll:
+        ai_mode == 'manual' + manual_action in {'charge', 'discharge'}.
+        In diesem Fall gibt evaluate() None zurück — ManualRule greift.
+        """
+        if not (0 <= ctx.now.hour < 5):
+            return False
+        if ctx.ai_mode == "manual" and ctx.manual_action not in (
+            "", "standby", "constant_discharge"
+        ):
+            return False
+        return True
 
     # --------------------------------------------------
     # Profitabilitätsprüfung (EnWG 14a Modul 3 vorbereitet)
@@ -867,27 +886,21 @@ class DecisionEngine:
     # -------------------------------------------------
 
     def evaluate(self, ctx: DecisionContext) -> DecisionResult:
-        is_night_window = 0 <= ctx.now.hour < 5
-
-        if not is_night_window:
-            self._night_controller.last_assessment = None
-
         try:
-            # Night window: Controller ownt 00–05 vollständig
-            if is_night_window:
+            if not self._night_controller.is_active(ctx):
+                self._night_controller.last_assessment = None
+                self._planning_result = self._evaluate_adaptive_planning(ctx)
+            else:
                 result = self._night_controller.evaluate(self, ctx)
                 if result is not None:
                     _LOGGER.debug(
                         "NightWindowController → %s (%s)", result.action, result.reason,
                     )
                     return result
-                # Manual pass-through: Planning erst jetzt berechnen (nicht im Normal-Fall)
+                # is_active() filtert manual pass-through — sollte nicht eintreten
                 _LOGGER.debug("NightWindowController → pass (manual override)")
                 self._planning_result = self._evaluate_adaptive_planning(ctx)
-            else:
-                self._planning_result = self._evaluate_adaptive_planning(ctx)
 
-            # Normal chain (tagsüber oder nach manual pass-through)
             for rule in self._rules:
                 result = rule.evaluate(self, ctx)
                 if result is not None:

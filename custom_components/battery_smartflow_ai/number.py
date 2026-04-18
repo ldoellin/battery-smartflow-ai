@@ -12,10 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
-    INTEGRATION_NAME,
-    INTEGRATION_MANUFACTURER,
-    INTEGRATION_MODEL,
-    INTEGRATION_VERSION,
+    build_device_info,
     SETTING_BATTERY_PACKS,
     DEFAULT_BATTERY_PACKS,
     SETTING_PEAK_FACTOR,
@@ -52,6 +49,24 @@ from .const import (
 # Bewusst verschieden von DEFAULT_VERY_CHEAP_PRICE = None in const.py,
 # das als Coordinator-Sentinel für "Feature deaktiviert" dient.
 _ENTITY_DEFAULT_VERY_CHEAP_PRICE = 0.0
+
+_SETTING_DEFAULTS: dict[str, float] = {
+    SETTING_BATTERY_PACKS:              DEFAULT_BATTERY_PACKS,
+    SETTING_PEAK_FACTOR:                DEFAULT_PEAK_FACTOR,
+    SETTING_VALLEY_FACTOR:              DEFAULT_VALLEY_FACTOR,
+    SETTING_VERY_CHEAP_PRICE:           _ENTITY_DEFAULT_VERY_CHEAP_PRICE,
+    SETTING_SOC_MIN:                    DEFAULT_SOC_MIN,
+    SETTING_SOC_MAX:                    DEFAULT_SOC_MAX,
+    SETTING_MAX_CHARGE:                 DEFAULT_MAX_CHARGE,
+    SETTING_MAX_DISCHARGE:              DEFAULT_MAX_DISCHARGE,
+    SETTING_EMERGENCY_SOC:              DEFAULT_EMERGENCY_SOC,
+    SETTING_EMERGENCY_CHARGE:           DEFAULT_EMERGENCY_CHARGE,
+    SETTING_PROFIT_MARGIN_PCT:          DEFAULT_PROFIT_MARGIN_PCT,
+    SETTING_VERY_EXPENSIVE_THRESHOLD:   DEFAULT_VERY_EXPENSIVE_THRESHOLD,
+    SETTING_DAYTIME_CONSUMPTION_W:      DEFAULT_DAYTIME_CONSUMPTION_W,
+    SETTING_NIGHTTIME_CONSUMPTION_W:    DEFAULT_NIGHTTIME_CONSUMPTION_W,
+    SETTING_PV_OPTIMISM_FACTOR:         DEFAULT_PV_OPTIMISM_FACTOR,
+}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -262,38 +277,10 @@ async def async_setup_entry(
     for ent in entities:
         key = ent.entity_description.runtime_key
 
-        if key == SETTING_BATTERY_PACKS:
-            default_value = DEFAULT_BATTERY_PACKS
-        elif key == SETTING_PEAK_FACTOR:
-            default_value = DEFAULT_PEAK_FACTOR
-        elif key == SETTING_VALLEY_FACTOR:
-            default_value = DEFAULT_VALLEY_FACTOR
-        elif key == SETTING_VERY_CHEAP_PRICE:
-            default_value = _ENTITY_DEFAULT_VERY_CHEAP_PRICE
-        elif key == SETTING_SOC_MIN:
-            default_value = DEFAULT_SOC_MIN
-        elif key == SETTING_SOC_MAX:
-            default_value = DEFAULT_SOC_MAX
-        elif key == SETTING_MAX_CHARGE:
-            default_value = DEFAULT_MAX_CHARGE
-        elif key == SETTING_MAX_DISCHARGE:
-            default_value = DEFAULT_MAX_DISCHARGE
-        elif key == SETTING_EMERGENCY_SOC:
-            default_value = DEFAULT_EMERGENCY_SOC
-        elif key == SETTING_EMERGENCY_CHARGE:
-            default_value = DEFAULT_EMERGENCY_CHARGE
-        elif key == SETTING_PROFIT_MARGIN_PCT:
-            default_value = DEFAULT_PROFIT_MARGIN_PCT
-        elif key == SETTING_VERY_EXPENSIVE_THRESHOLD:
-            default_value = DEFAULT_VERY_EXPENSIVE_THRESHOLD
-        elif key == SETTING_DAYTIME_CONSUMPTION_W:
-            default_value = DEFAULT_DAYTIME_CONSUMPTION_W
-        elif key == SETTING_NIGHTTIME_CONSUMPTION_W:
-            default_value = DEFAULT_NIGHTTIME_CONSUMPTION_W
-        elif key == SETTING_PV_OPTIMISM_FACTOR:
-            default_value = DEFAULT_PV_OPTIMISM_FACTOR
-        else:
-            default_value = ent.entity_description.native_min_value
+        default_value = _SETTING_DEFAULTS.get(
+            key,
+            ent.entity_description.native_min_value,
+        )
 
         coordinator.runtime_settings[key] = entry.options.get(
             key,
@@ -315,13 +302,7 @@ class ZendureSmartFlowNumber(NumberEntity):
         self._entry = entry
 
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": INTEGRATION_NAME,
-            "manufacturer": INTEGRATION_MANUFACTURER,
-            "model": INTEGRATION_MODEL,
-            "sw_version": INTEGRATION_VERSION,
-        }
+        self._attr_device_info = build_device_info(entry.entry_id)
 
         # Defensive init
         if description.runtime_key not in coordinator.runtime_settings:

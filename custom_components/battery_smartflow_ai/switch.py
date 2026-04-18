@@ -8,10 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
-    INTEGRATION_NAME,
-    INTEGRATION_MANUFACTURER,
-    INTEGRATION_MODEL,
-    INTEGRATION_VERSION,
+    build_device_info,
     SETTING_PV_FORECAST_ENABLED,
     DEFAULT_PV_FORECAST_ENABLED,
     SETTING_WALLBOX_BLOCK_ENABLED,
@@ -28,10 +25,10 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id]
 
     # Initialise runtime setting from stored options (persisted across restarts)
-    coordinator.runtime_settings[SETTING_PV_FORECAST_ENABLED] = float(
+    coordinator.runtime_settings[SETTING_PV_FORECAST_ENABLED] = (
         entry.options.get(SETTING_PV_FORECAST_ENABLED, DEFAULT_PV_FORECAST_ENABLED)
     )
-    coordinator.runtime_settings[SETTING_WALLBOX_BLOCK_ENABLED] = float(
+    coordinator.runtime_settings[SETTING_WALLBOX_BLOCK_ENABLED] = (
         entry.options.get(SETTING_WALLBOX_BLOCK_ENABLED, DEFAULT_WALLBOX_BLOCK_ENABLED)
     )
 
@@ -52,23 +49,14 @@ class PvNightChargeSwitch(SwitchEntity):
         self.coordinator = coordinator
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_pv_forecast_enabled"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": INTEGRATION_NAME,
-            "manufacturer": INTEGRATION_MANUFACTURER,
-            "model": INTEGRATION_MODEL,
-            "sw_version": INTEGRATION_VERSION,
-        }
+        self._attr_device_info = build_device_info(entry.entry_id)
 
     @property
     def is_on(self) -> bool:
-        return (
-            float(
-                self.coordinator.runtime_settings.get(
-                    SETTING_PV_FORECAST_ENABLED, DEFAULT_PV_FORECAST_ENABLED
-                )
+        return bool(
+            self.coordinator.runtime_settings.get(
+                SETTING_PV_FORECAST_ENABLED, DEFAULT_PV_FORECAST_ENABLED
             )
-            >= 1.0
         )
 
     async def async_turn_on(self, **kwargs) -> None:
@@ -105,23 +93,14 @@ class WallboxBlockSwitch(SwitchEntity):
         self.coordinator = coordinator
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_wallbox_block_enabled"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": INTEGRATION_NAME,
-            "manufacturer": INTEGRATION_MANUFACTURER,
-            "model": INTEGRATION_MODEL,
-            "sw_version": INTEGRATION_VERSION,
-        }
+        self._attr_device_info = build_device_info(entry.entry_id)
 
     @property
     def is_on(self) -> bool:
-        return (
-            float(
-                self.coordinator.runtime_settings.get(
-                    SETTING_WALLBOX_BLOCK_ENABLED, DEFAULT_WALLBOX_BLOCK_ENABLED
-                )
+        return bool(
+            self.coordinator.runtime_settings.get(
+                SETTING_WALLBOX_BLOCK_ENABLED, DEFAULT_WALLBOX_BLOCK_ENABLED
             )
-            >= 1.0
         )
 
     async def async_turn_on(self, **kwargs) -> None:
