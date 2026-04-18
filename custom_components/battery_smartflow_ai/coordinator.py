@@ -321,8 +321,6 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         round_trip_efficiency = float(self._device_profile_cfg.get("ROUND_TRIP_EFFICIENCY", 0.90))
         self._night_controller = NightWindowController(round_trip_efficiency)
         self._engine = DecisionEngine(self._night_controller)
-        self._last_decision_reason: str = "idle"
-
         # Hysterese-Tracker für BYD und Wallbox Koordination
         self._hys_byd_charge    = _HysteresisState(delay_on_s=15, delay_off_s=300, threshold=80.0)
         self._hys_byd_discharge = _HysteresisState(delay_on_s=15, delay_off_s=300, threshold=80.0)
@@ -840,7 +838,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "fault_level_status": "normal",
         }
 
-    async def _read_sensors(self, now: datetime) -> _CycleState | None:
+    def _read_sensors(self, now: datetime) -> _CycleState | None:
         """Liest alle Sensoren und baut _CycleState.  Gibt None zurück wenn Pflichtsensoren fehlen."""
         soc = _to_float(self._state(self.entities.soc), None)
         pv  = _to_float(self._state(self.entities.pv),  None)
@@ -1075,8 +1073,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.runtime_settings.get(SETTING_PV_OPTIMISM_FACTOR, DEFAULT_PV_OPTIMISM_FACTOR)
             ),
             night_charge_required=(
-                0 <= state.now.hour < 5
-                and self._night_controller.last_assessment is not None
+                self._night_controller.last_assessment is not None
                 and self._night_controller.last_assessment.charge_needed_kwh >= 0.2
             ),
             night_charge_active=self._byd.night_active,
@@ -1287,7 +1284,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             now   = dt_util.now()
-            state = await self._read_sensors(now)
+            state = self._read_sensors(now)
             if state is None:
                 return self._sensor_invalid_payload()
 
@@ -1297,9 +1294,12 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # BMS SoC-Limits + Entlade-Hysterese — muss vor _byd.update() liegen
             decision = self._apply_soc_guards(decision, state)
 
-            # BYD Nachtladung
-            if state.pv_forecast_enabled:
-                await self._byd.update(ctx, now, self._night_controller.last_assessment)
+            # BYD Nachtladung — immer aufrufen, damit BYD bei deaktiviertem Feature
+            # aus dem Lade-Modus herausgeführt wird (assessment=None → byd_charge=0 → Stop).
+            await self._byd.update(
+                ctx, now,
+                self._night_controller.last_assessment if state.pv_forecast_enabled else None,
+            )
 
             # Profit-Tracking
             self._track_profit(decision, state)
@@ -1310,10 +1310,6 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._persist["prev_charge_w"] = float(decision.charge_w)
             else:
                 self._persist["prev_charge_w"] = 0.0
-
-            # Decision reason merken — NACH allen SoC-Limit-Modifikationen,
-            # damit BydNightChargeManager im nächsten Zyklus den echten Zustand sieht.
-            self._last_decision_reason = decision.reason if decision else "idle"
 
             # Sollwerte setzen
             ac_mode, in_w, out_w = await self._apply_setpoints(decision, now)
