@@ -12,27 +12,13 @@ from .const import (
     SETTING_PV_FORECAST_ENABLED,
 )
 from .decision_engine import DecisionContext, NightEnergyAssessment
+from .utils import _to_float
 
 if TYPE_CHECKING:
     from .coordinator import SelectedEntities
 
 _LOGGER = logging.getLogger(__name__)
 
-
-def _to_float(v: Any, default: float | None = None) -> float | None:
-    """Lokale Kopie von coordinator._to_float (verhindert zirkulären Import)."""
-    try:
-        if v is None:
-            return default
-        if isinstance(v, (int, float)):
-            return float(v)
-        s = str(v).strip()
-        if s == "" or s.lower() in ("unknown", "unavailable", "none"):
-            return default
-        return float(s)
-    except Exception:
-        _LOGGER.debug("_to_float: unexpected value %r, returning default %r", v, default)
-        return default
 
 
 class BydNightChargeManager:

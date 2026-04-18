@@ -20,6 +20,9 @@ from .const import (
     DEFAULT_BATTERY_PACKS,
     SETTING_PEAK_FACTOR,
     DEFAULT_PEAK_FACTOR,
+    SETTING_VALLEY_FACTOR,
+    DEFAULT_VALLEY_FACTOR,
+    SETTING_VERY_CHEAP_PRICE,
     SETTING_SOC_MIN,
     DEFAULT_SOC_MIN,
     SETTING_SOC_MAX,
@@ -45,12 +48,10 @@ from .const import (
     DEFAULT_PV_OPTIMISM_FACTOR,
 )
 
-# --- NEW SETTINGS ---
-SETTING_VALLEY_FACTOR = "valley_factor"
-DEFAULT_VALLEY_FACTOR = 0.85
-
-SETTING_VERY_CHEAP_PRICE = "very_cheap_price"
-DEFAULT_VERY_CHEAP_PRICE = 0.0
+# Numerischer Entity-Default für very_cheap_price (0.0 = kein Filter).
+# Bewusst verschieden von DEFAULT_VERY_CHEAP_PRICE = None in const.py,
+# das als Coordinator-Sentinel für "Feature deaktiviert" dient.
+_ENTITY_DEFAULT_VERY_CHEAP_PRICE = 0.0
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -268,7 +269,7 @@ async def async_setup_entry(
         elif key == SETTING_VALLEY_FACTOR:
             default_value = DEFAULT_VALLEY_FACTOR
         elif key == SETTING_VERY_CHEAP_PRICE:
-            default_value = DEFAULT_VERY_CHEAP_PRICE
+            default_value = _ENTITY_DEFAULT_VERY_CHEAP_PRICE
         elif key == SETTING_SOC_MIN:
             default_value = DEFAULT_SOC_MIN
         elif key == SETTING_SOC_MAX:
@@ -351,6 +352,7 @@ class ZendureSmartFlowNumber(NumberEntity):
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
         self.async_on_remove(
             self.coordinator.async_add_listener(self.async_write_ha_state)
         )

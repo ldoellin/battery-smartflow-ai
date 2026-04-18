@@ -69,6 +69,7 @@ from .const import (
     SETTING_BATTERY_PACKS,
     SETTING_PEAK_FACTOR,
     SETTING_VALLEY_FACTOR,
+    SETTING_VERY_CHEAP_PRICE,
     # defaults
     DEFAULT_SOC_MIN,
     DEFAULT_SOC_MAX,
@@ -116,24 +117,23 @@ from .const import (
 from .device_profiles import DEVICE_PROFILES, merge_profile_with_overrides
 from .decision_engine import DecisionEngine, DecisionContext, PricePoint, NightWindowController
 from .byd_manager import BydNightChargeManager
+from .utils import _to_float
 
 _LOGGER = logging.getLogger(__name__)
 STORE_VERSION = 1
 
 
-def _to_float(v: Any, default: float | None = None) -> float | None:
+def _iso_or_none(val) -> str | None:
+    """Konvertiert einen datetime-Wert oder ISO-String in UTC-ISO-String, sonst None."""
     try:
-        if v is None:
-            return default
-        if isinstance(v, (int, float)):
-            return float(v)
-        s = str(v).strip()
-        if s == "" or s.lower() in ("unknown", "unavailable", "none"):
-            return default
-        return float(s)
+        if not val:
+            return None
+        dt = dt_util.parse_datetime(str(val))
+        return dt_util.as_utc(dt).isoformat() if dt else None
     except Exception:
-        _LOGGER.debug("_to_float: unexpected value %r, returning default %r", v, default)
-        return default
+        return None
+
+
 
 
 class _HysteresisState:
@@ -668,13 +668,17 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         out.sort(key=lambda x: x.start)
         return out
 
-    def _season_detection(self, pv_w: float, export_w: float) -> str:
+    def _season_detection(self, pv_w: float, export_w: float, now: datetime) -> str:
         """
         Season detection based on installed PV power.
         Slow anti-flip counter with relative thresholds.
         """
         season = self._persist.get("season_mode", "winter")
         counter = int(self._persist.get("season_counter", 0))
+
+        # Nachts wäre PV=0 dauerhaft winter_signal → Counter einfrieren
+        if not (6 <= now.hour < 20):
+            return season
 
         installed_pv_wp = self._get_installed_pv_wp()
 
@@ -759,10 +763,6 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         try:
-            if self._persist.get("last_ts") is None:
-                await self._load()
-                self._persist["last_ts"] = dt_util.utcnow().isoformat()
-
             now = dt_util.now()  # lokalisierte Zeit – korrekt für Stunden-Vergleiche
 
             soc = _to_float(self._state(self.entities.soc), None)
@@ -958,7 +958,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ) or DEFAULT_VALLEY_FACTOR
             )
 
-            very_cheap_price = self.runtime_settings.get("very_cheap_price", None)
+            very_cheap_price = self.runtime_settings.get(SETTING_VERY_CHEAP_PRICE, None)
             if very_cheap_price is not None:
                 try:
                     very_cheap_price = float(very_cheap_price)
@@ -1004,6 +1004,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             season = self._season_detection(
                 pv_w=pv_w,
                 export_w=float(grid_export),
+                now=now,
             )
 
             # -----------------------------
@@ -1071,6 +1072,20 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             decision = self._engine.evaluate(ctx)
 
+            # -----------------------------
+            # BMS SoC limit (directional block)
+            # Muss vor _byd.update() liegen, damit BYD nicht lädt wenn Upper-Limit aktiv.
+            # -----------------------------
+            soc_limit = self._get_soc_limit()
+            if soc_limit == 1 and decision.ac_mode == "input" and float(decision.charge_w or 0.0) > 0:
+                decision.charge_w = 0.0
+                decision.action = "idle"
+                decision.reason = "soc_limit_upper"
+            elif soc_limit == 2 and decision.ac_mode == "output" and float(decision.discharge_w or 0.0) > 0:
+                decision.discharge_w = 0.0
+                decision.action = "idle"
+                decision.reason = "soc_limit_lower"
+
             # --- BYD Nachtladung (v3.2) ---
             if pv_forecast_enabled:
                 await self._byd.update(ctx, now, self._night_controller.last_assessment)
@@ -1136,19 +1151,6 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._persist["prev_charge_w"] = float(decision.charge_w)
             else:
                 self._persist["prev_charge_w"] = 0.0
-
-            # -----------------------------
-            # BMS SoC limit (directional block)
-            # -----------------------------
-            soc_limit = self._get_soc_limit()
-            if soc_limit == 1 and decision.ac_mode == "input" and float(decision.charge_w or 0.0) > 0:
-                decision.charge_w = 0.0
-                decision.action = "idle"
-                decision.reason = "soc_limit_upper"
-            elif soc_limit == 2 and decision.ac_mode == "output" and float(decision.discharge_w or 0.0) > 0:
-                decision.discharge_w = 0.0
-                decision.action = "idle"
-                decision.reason = "soc_limit_lower"
 
             # SOC_MIN-Hysterese: Entladung gesperrt bis SoC auf soc_min + resume_margin steigt
             discharge_blocked_by_soc_min = self._update_discharge_resume_hysteresis(
@@ -1275,15 +1277,6 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._persist.get("discharge_resume_soc", float(soc_min))
                 ),
             }
-
-            def _iso_or_none(val):
-                try:
-                    if not val:
-                        return None
-                    dt = dt_util.parse_datetime(str(val))
-                    return dt_util.as_utc(dt).isoformat() if dt else None
-                except Exception:
-                    return None
 
             next_action_time_state = _iso_or_none(self._persist.get("next_action_time"))
 

@@ -23,6 +23,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     coordinator = ZendureSmartFlowCoordinator(hass, entry)
+    await coordinator._load()
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await coordinator.async_config_entry_first_refresh()
@@ -52,5 +53,6 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             data=new_data,
             version=2,
         )
+        _LOGGER.info("Migration v1 → v2 abgeschlossen")
 
     return True

@@ -271,7 +271,8 @@ class ManualRule(BaseRule):
         if ctx.manual_action == MANUAL_CONST_DISCHARGE:
             # Wallbox lädt → discharge_w=0, Zendure bleibt im Output-Modus aber gibt nichts ab.
             # Kein Moduswechsel auf idle. max_discharge_w Einstellung bleibt erhalten.
-            # NightChargeRule darf überschreiben (läuft an Pos. 3, vor ManualRule).
+            # Im GO-Fenster (00–05h) übernimmt NightWindowController — falls er None zurückgibt
+            # (constant_discharge pass-through), greift diese Regel.
             if engine._wallbox_blocks_discharge(ctx):
                 return DecisionResult(
                     action="discharge",
@@ -449,6 +450,15 @@ class NightWindowController:
         self.last_assessment = self.assess(ctx)
         a = self.last_assessment
 
+        # Emergency hat absolute Priorität – auch im Nachtfenster
+        if ctx.soc <= ctx.emergency_soc:
+            return DecisionResult(
+                action="emergency", ac_mode="input",
+                charge_w=min(ctx.max_charge_w, ctx.emergency_charge_w),
+                discharge_w=0.0,
+                reason="emergency_latched_charge",
+            )
+
         # ── Schutz hat absolute Priorität ──────────────────────────────────────
         if not a.bridge_covered or not a.evening_covered:
             if engine._byd_blocks_charge(ctx):
@@ -482,6 +492,26 @@ class NightWindowController:
                 action="idle", ac_mode="input",
                 charge_w=0.0, discharge_w=0.0,
                 reason="night_charge_pause",
+            )
+
+        # ── Manual constant_discharge: Schutz gilt, keine Profitabilitätsprüfung ─
+        if ctx.ai_mode == "manual" and ctx.manual_action == MANUAL_CONST_DISCHARGE:
+            if engine._wallbox_blocks_discharge(ctx):
+                return DecisionResult(
+                    action="discharge", ac_mode="output",
+                    charge_w=0.0, discharge_w=0.0,
+                    reason="manual_constant_discharge",
+                )
+            if engine._byd_blocks_discharge(ctx) or engine._bridge_reserve_blocks_discharge(ctx):
+                return DecisionResult(
+                    action="idle", ac_mode="input",
+                    charge_w=0.0, discharge_w=0.0,
+                    reason="manual_idle",
+                )
+            return DecisionResult(
+                action="discharge", ac_mode="output",
+                charge_w=0.0, discharge_w=float(ctx.max_discharge_w),
+                reason="manual_constant_discharge",
             )
 
         # ── Entladen: nur wenn nach Wandlungsverlusten profitabel ──────────────
@@ -837,22 +867,25 @@ class DecisionEngine:
     # -------------------------------------------------
 
     def evaluate(self, ctx: DecisionContext) -> DecisionResult:
-        self._planning_result = self._evaluate_adaptive_planning(ctx)
+        is_night_window = 0 <= ctx.now.hour < 5
 
-        # Außerhalb des Nacht-Fensters: Assessment zurücksetzen
-        if not (0 <= ctx.now.hour < 5):
+        if not is_night_window:
             self._night_controller.last_assessment = None
 
         try:
             # Night window: Controller ownt 00–05 vollständig
-            if 0 <= ctx.now.hour < 5:
+            if is_night_window:
                 result = self._night_controller.evaluate(self, ctx)
                 if result is not None:
                     _LOGGER.debug(
                         "NightWindowController → %s (%s)", result.action, result.reason,
                     )
                     return result
+                # Manual pass-through: Planning erst jetzt berechnen (nicht im Normal-Fall)
                 _LOGGER.debug("NightWindowController → pass (manual override)")
+                self._planning_result = self._evaluate_adaptive_planning(ctx)
+            else:
+                self._planning_result = self._evaluate_adaptive_planning(ctx)
 
             # Normal chain (tagsüber oder nach manual pass-through)
             for rule in self._rules:
