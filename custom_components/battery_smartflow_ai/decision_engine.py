@@ -98,6 +98,7 @@ class DecisionResult:
     discharge_w: float
     reason: str
     target_soc: Optional[float] = None
+    layer: Optional[str] = None   # Welche NWC-Schicht hat entschieden (constraints/guards/policy)
 
 
 @dataclass
@@ -507,6 +508,7 @@ class NightWindowController:
                 charge_w=min(ctx.max_charge_w, ctx.emergency_charge_w),
                 discharge_w=0.0,
                 reason="emergency_latched_charge",
+                layer="constraints",
             )
 
         # 2. Energie-Physik: Brücke oder Abend nicht gedeckt → Laden erforderlich
@@ -518,23 +520,27 @@ class NightWindowController:
                     action="idle", ac_mode="input",
                     charge_w=0.0, discharge_w=0.0,
                     reason="night_charge_byd_discharging",
+                    layer="constraints",
                 )
             if ctx.max_charge_w <= 0:
                 return DecisionResult(
                     action="idle", ac_mode="input",
                     charge_w=0.0, discharge_w=0.0,
                     reason="night_charge_no_capacity",
+                    layer="constraints",
                 )
             if a.z_charge_kwh >= 0.2:
                 return DecisionResult(
                     action="charge", ac_mode="input",
                     charge_w=ctx.max_charge_w, discharge_w=0.0,
                     reason="night_charge_go_window",
+                    layer="constraints",
                 )
             return DecisionResult(
                 action="idle", ac_mode="input",
                 charge_w=0.0, discharge_w=0.0,
                 reason="night_charge_pause",
+                layer="constraints",
             )
 
         return None  # kein Energie-Constraint aktiv → System-Guards prüfen
@@ -566,12 +572,14 @@ class NightWindowController:
                 action="discharge", ac_mode="output",
                 charge_w=0.0, discharge_w=0.0,
                 reason="night_guard_wallbox",
+                layer="guards",
             )
         if engine._byd_blocks_discharge(ctx):
             return DecisionResult(
                 action="idle", ac_mode="input",
                 charge_w=0.0, discharge_w=0.0,
                 reason="night_guard_byd_charging",
+                layer="guards",
             )
         # BYD-Systemzustand: lädt noch oder Ladebedarf aus letztem Zyklus
         if ctx.night_charge_required or ctx.night_charge_active:
@@ -579,6 +587,7 @@ class NightWindowController:
                 action="idle", ac_mode="input",
                 charge_w=0.0, discharge_w=0.0,
                 reason="night_charge_pause",
+                layer="guards",
             )
         return None  # keine Guards aktiv → Policy entscheidet
 
@@ -603,6 +612,7 @@ class NightWindowController:
                 action="discharge", ac_mode="output",
                 charge_w=0.0, discharge_w=float(ctx.max_discharge_w),
                 reason="manual_constant_discharge",
+                layer="policy",
             )
 
         # 2. Auto: Entladen wenn nach Wandlungsverlusten profitabel
@@ -616,6 +626,7 @@ class NightWindowController:
                     action="discharge", ac_mode="output",
                     charge_w=0.0, discharge_w=discharge_w,
                     reason="night_discharge_profitable",
+                    layer="policy",
                 )
 
         # 3. Kein Eingriff nötig
@@ -623,6 +634,7 @@ class NightWindowController:
             action="idle", ac_mode="input",
             charge_w=0.0, discharge_w=0.0,
             reason="night_no_intervention_needed",
+            layer="policy",
         )
 
 
@@ -964,7 +976,8 @@ class DecisionEngine:
                 result = self._night_controller.evaluate(self, ctx)
                 if result is not None:
                     _LOGGER.debug(
-                        "NightWindowController → %s (%s)", result.action, result.reason,
+                        "NightWindowController [%s] → %s (%s)",
+                        result.layer or "?", result.action, result.reason,
                     )
                     return result
                 # is_active() filtert manual pass-through — sollte nicht eintreten
