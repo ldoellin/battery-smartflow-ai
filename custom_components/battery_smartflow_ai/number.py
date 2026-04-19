@@ -43,6 +43,9 @@ from .const import (
     DEFAULT_NIGHTTIME_CONSUMPTION_W,
     SETTING_PV_OPTIMISM_FACTOR,
     DEFAULT_PV_OPTIMISM_FACTOR,
+    # Abendverbrauch (v4.3)
+    SETTING_EVENING_CONSUMPTION_W,
+    DEFAULT_EVENING_CONSUMPTION_W,
 )
 
 # Numerischer Entity-Default für very_cheap_price (0.0 = kein Filter).
@@ -66,6 +69,7 @@ _SETTING_DEFAULTS: dict[str, float] = {
     SETTING_DAYTIME_CONSUMPTION_W:      DEFAULT_DAYTIME_CONSUMPTION_W,
     SETTING_NIGHTTIME_CONSUMPTION_W:    DEFAULT_NIGHTTIME_CONSUMPTION_W,
     SETTING_PV_OPTIMISM_FACTOR:         DEFAULT_PV_OPTIMISM_FACTOR,
+    SETTING_EVENING_CONSUMPTION_W:      DEFAULT_EVENING_CONSUMPTION_W,
 }
 
 
@@ -253,6 +257,19 @@ NUMBERS: tuple[ZendureNumberEntityDescription, ...] = (
         native_step=0.1,
         mode="box",
         icon="mdi:weather-sunny-alert",
+    ),
+
+    # --- Abendverbrauch (v4.3) ---
+    ZendureNumberEntityDescription(
+        key=SETTING_EVENING_CONSUMPTION_W,
+        translation_key="evening_consumption_w",
+        runtime_key=SETTING_EVENING_CONSUMPTION_W,
+        native_min_value=0.0,
+        native_max_value=2000.0,
+        native_step=50.0,
+        native_unit_of_measurement="W",
+        mode="box",
+        icon="mdi:weather-night-partly-cloudy",
     ),
 )
 

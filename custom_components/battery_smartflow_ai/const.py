@@ -10,7 +10,7 @@ DOMAIN = "battery_smartflow_ai"
 INTEGRATION_NAME = "Battery SmartFlow AI"
 INTEGRATION_MANUFACTURER = "PalmManiac"
 INTEGRATION_MODEL = "Home Assistant Integration"
-INTEGRATION_VERSION = "4.2.1-custom"
+INTEGRATION_VERSION = "4.3.0-custom"
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -81,6 +81,7 @@ SETTING_NIGHTTIME_CONSUMPTION_W  = "nighttime_consumption_w"   # Hausverbrauch n
 
 # Wallbox-Schutz (custom)
 SETTING_WALLBOX_BLOCK_ENABLED    = "wallbox_block_enabled"     # 1.0 = Entladung bei Schnellladen verhindern
+SETTING_EVENING_CONSUMPTION_W   = "evening_consumption_w"      # Abendverbrauch 18–24 Uhr in W (Punkt 4)
 
 # Default
 DEFAULT_PACK_CAPACITY_KWH = 2.88
@@ -101,6 +102,7 @@ SETTING_PV_OPTIMISM_FACTOR       = "pv_optimism_factor"   # PV-Skalierung für N
 DEFAULT_PV_OPTIMISM_FACTOR       = 1.5    # P10 × 1.5 → konservativere Nachtladung (Spielraum für PV)
 DEFAULT_WALLBOX_BLOCK_ENABLED    = 1.0     # Standard: Entladung bei Schnellladen verhindern
 DEFAULT_PV_DAILY_YIELD_FALLBACK_KWH = 25.0  # Fallback wenn kein Solcast + keine History
+DEFAULT_EVENING_CONSUMPTION_W    = 500.0   # Watt (18–24 Uhr, 6h → 3 kWh; entspricht bisherigem bridge_kwh×2)
 
 # --------------------------------------------------
 # Device profiles (V1.5.x / V3.2.0 overrides)
@@ -128,6 +130,12 @@ AI_MODE_WINTER = "winter"
 AI_MODE_MANUAL = "manual"
 
 AI_MODES = [AI_MODE_AUTOMATIC, AI_MODE_SUMMER, AI_MODE_WINTER, AI_MODE_MANUAL]
+
+# Season override (v4.3)
+SEASON_OVERRIDE_AUTO   = "auto"
+SEASON_OVERRIDE_SUMMER = "summer"
+SEASON_OVERRIDE_WINTER = "winter"
+SEASON_OVERRIDES = [SEASON_OVERRIDE_AUTO, SEASON_OVERRIDE_SUMMER, SEASON_OVERRIDE_WINTER]
 
 MANUAL_STANDBY = "standby"
 MANUAL_CHARGE = "charge"

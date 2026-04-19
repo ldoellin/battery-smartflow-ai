@@ -179,6 +179,14 @@
           "discharge": "Discharge",
           "constant_discharge": "Constant discharge"
         }
+      },
+      "season_override": {
+        "name": "Season override",
+        "state": {
+          "auto": "Automatic",
+          "summer": "Summer",
+          "winter": "Winter"
+        }
       }
     },
 
@@ -197,6 +205,7 @@
       "very_cheap_price": { "name": "Very cheap price threshold (€/kWh)" },
       "daytime_consumption_w": { "name": "Daytime consumption (W)" },
       "nighttime_consumption_w": { "name": "Nighttime consumption (W)" },
+      "evening_consumption_w": { "name": "Evening consumption (W)" },
       "pv_optimism_factor": { "name": "PV optimism factor" }
     },
 

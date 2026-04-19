@@ -179,6 +179,14 @@
           "discharge": "Entladen",
           "constant_discharge": "Konstante Entladung"
         }
+      },
+      "season_override": {
+        "name": "Jahreszeit Override",
+        "state": {
+          "auto": "Automatisch",
+          "summer": "Sommer",
+          "winter": "Winter"
+        }
       }
     },
 
@@ -197,6 +205,7 @@
       "very_cheap_price": { "name": "Sehr-günstig-Schwelle (€/kWh)" },
       "daytime_consumption_w": { "name": "Tagesverbrauch (W)" },
       "nighttime_consumption_w": { "name": "Nachtverbrauch (W)" },
+      "evening_consumption_w": { "name": "Abendverbrauch (W)" },
       "pv_optimism_factor": { "name": "PV-Optimismus-Faktor" }
     },
 

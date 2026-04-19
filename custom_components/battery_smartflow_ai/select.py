@@ -14,6 +14,8 @@ from .const import (
     MANUAL_ACTIONS,
     AI_MODE_AUTOMATIC,
     MANUAL_STANDBY,
+    SEASON_OVERRIDES,
+    SEASON_OVERRIDE_AUTO,
 )
 
 
@@ -48,6 +50,16 @@ SELECTS: tuple[ZendureSelectEntityDescription, ...] = (
         options_list=MANUAL_ACTIONS,     # ← NUR stabile Keys!
         default_option=MANUAL_STANDBY,
         icon="mdi:gesture-tap-button",
+    ),
+
+    # 3. Season Override (v4.3)
+    ZendureSelectEntityDescription(
+        key="season_override",
+        translation_key="season_override",
+        runtime_key="season_override",
+        options_list=SEASON_OVERRIDES,
+        default_option=SEASON_OVERRIDE_AUTO,
+        icon="mdi:weather-partly-snowy-rainy",
     ),
 )
 

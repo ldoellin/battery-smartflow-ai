@@ -128,6 +128,14 @@
           "discharge": "Décharger",
           "constant_discharge": "Décharge constante"
         }
+      },
+      "season_override": {
+        "name": "Saison forcée",
+        "state": {
+          "auto": "Automatique",
+          "summer": "Été",
+          "winter": "Hiver"
+        }
       }
     },
     "number": {

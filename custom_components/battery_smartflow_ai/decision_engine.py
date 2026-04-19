@@ -85,6 +85,7 @@ class DecisionContext:
     nighttime_kwh: float = 0.0                # Hausverbrauch bis 05:00 (0 tagsüber)
     pv_self_consumption_kwh: float = 5.0      # PV direkt Hausverbrauch tagsüber (nicht in Batterie)
     pv_optimism_factor: float = 1.5           # Skalierung P10→optimistisch für Nachtlade-Mengenkalkulation
+    evening_consumption_w: float = 500.0      # Abendverbrauch 18–24 Uhr in W (v4.3, ersetzt bridge_kwh×2)
     night_charge_required: bool = False   # Ladebedarf ≥ 0.2 kWh (aus letztem BYD-Zyklus)
     night_charge_active: bool = False     # BYD lädt gerade aktiv (aus letztem BYD-Zyklus)
 
@@ -371,7 +372,7 @@ class NightWindowController:
             0.0,
             pv_forecast * ctx.pv_optimism_factor - ctx.pv_self_consumption_kwh,
         )
-        evening_need   = ctx.bridge_kwh * 2.0
+        evening_need   = ctx.evening_consumption_w / 1000.0 * 6.0  # 18–24 Uhr = 6h
         bridge_covered = projected_at_5 >= ctx.bridge_kwh
 
         if bridge_covered:

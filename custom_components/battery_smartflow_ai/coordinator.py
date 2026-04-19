@@ -48,6 +48,8 @@ from .const import (
     SETTING_NIGHTTIME_CONSUMPTION_W,
     SETTING_PV_OPTIMISM_FACTOR,
     SETTING_WALLBOX_BLOCK_ENABLED,
+    SETTING_EVENING_CONSUMPTION_W,
+    DEFAULT_EVENING_CONSUMPTION_W,
     DEFAULT_ADDITIONAL_BATTERY_CAPACITY_KWH,
     DEFAULT_PV_FORECAST_ENABLED,
     DEFAULT_DAYTIME_CONSUMPTION_W,
@@ -257,6 +259,7 @@ class _CycleState:
     house_load: float
     season: str
     soc_limit: int | None
+    evening_consumption_w: float = 500.0
     discharge_blocked_by_soc_min: bool = False
 
 
@@ -351,6 +354,8 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "charged_kwh": 0.0,
             "discharged_kwh": 0.0,
             "profit_eur": 0.0,
+            "profit_today_eur": 0.0,
+            "profit_today_date": None,
             "last_ts": None,
 
             # season detection (Option A)
@@ -726,7 +731,12 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         Season detection based on installed PV power.
         Slow anti-flip counter with relative thresholds.
+        season_override = summer|winter überspringt die Auto-Detection (v4.3).
         """
+        override = self.runtime_mode.get("season_override", "auto")
+        if override in ("summer", "winter"):
+            return override
+
         season = self._persist.get("season_mode", "winter")
         counter = int(self._persist.get("season_counter", 0))
 
@@ -929,7 +939,8 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         daytime_consumption_w   = float(self.runtime_settings.get(SETTING_DAYTIME_CONSUMPTION_W,   DEFAULT_DAYTIME_CONSUMPTION_W))
         nighttime_consumption_w = float(self.runtime_settings.get(SETTING_NIGHTTIME_CONSUMPTION_W, DEFAULT_NIGHTTIME_CONSUMPTION_W))
-        # Zeiteinteilung: 00–05 Nacht (5h) | 05–08 Brücke (3h) | 08–18 Tag (10h) | 18–24 Nacht (6h)
+        evening_consumption_w   = float(self.runtime_settings.get(SETTING_EVENING_CONSUMPTION_W,   DEFAULT_EVENING_CONSUMPTION_W))
+        # Zeiteinteilung: 00–05 Nacht (5h) | 05–08 Brücke (3h) | 08–18 Tag (10h) | 18–24 Abend (6h)
         pv_self_consumption_kwh = daytime_consumption_w   / 1000.0 * 10.0
         bridge_kwh              = nighttime_consumption_w / 1000.0 * 3.0
         daily_consumption_kwh   = (nighttime_consumption_w / 1000.0 * 11.0
@@ -1026,6 +1037,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             house_load=house_load,
             season=season,
             soc_limit=soc_limit,
+            evening_consumption_w=evening_consumption_w,
         )
 
     def _build_decision_context(self, state: _CycleState) -> DecisionContext:
@@ -1072,6 +1084,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             pv_optimism_factor=float(
                 self.runtime_settings.get(SETTING_PV_OPTIMISM_FACTOR, DEFAULT_PV_OPTIMISM_FACTOR)
             ),
+            evening_consumption_w=state.evening_consumption_w,
             night_charge_required=(
                 self._night_controller.last_assessment is not None
                 and self._night_controller.last_assessment.charge_needed_kwh >= 0.2
@@ -1106,6 +1119,12 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         price_now = state.price_now
         delta_kwh = state.delta_kwh
 
+        # Tages-Reset: profit_today_eur bei Datumswechsel auf 0 zurücksetzen
+        today_str = state.now.strftime("%Y-%m-%d")
+        if self._persist.get("profit_today_date") != today_str:
+            self._persist["profit_today_eur"]  = 0.0
+            self._persist["profit_today_date"] = today_str
+
         if delta_kwh > 0 and price_now is not None:
             charged_kwh = self._persist.get("trade_charged_kwh", 0.0)
             avg_price   = self._persist.get("trade_avg_charge_price")
@@ -1129,6 +1148,9 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 profit = (float(price_now) - float(avg_price)) * sold_kwh
                 self._persist["profit_eur"] = (
                     float(self._persist.get("profit_eur", 0.0)) + float(profit)
+                )
+                self._persist["profit_today_eur"] = (
+                    float(self._persist.get("profit_today_eur", 0.0)) + float(profit)
                 )
                 remaining = max(
                     0.0,
@@ -1190,6 +1212,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "price_now": state.price_now,
             "avg_charge_price": self._persist.get("trade_avg_charge_price"),
             "profit_eur": float(self._persist.get("profit_eur") or 0.0),
+            "profit_today_eur": float(self._persist.get("profit_today_eur", 0.0)),
             "max_charge": state.max_charge,
             "max_discharge": state.max_discharge,
             "set_mode": ac_mode,
@@ -1279,6 +1302,32 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "night_charge_zendure_kwh": _np.get("zendure_laden_kwh"),
             "total_available_kwh": total_available_kwh,
             "night_plan": _np,
+            # Punkt 1: Night-Assessment Transparenz-Sensoren (v4.3)
+            "night_assessment_projected_at_5": (
+                round(self._night_controller.last_assessment.projected_at_5, 3)
+                if self._night_controller.last_assessment is not None else None
+            ),
+            "night_assessment_battery_at_18": (
+                round(self._night_controller.last_assessment.battery_at_18, 3)
+                if self._night_controller.last_assessment is not None else None
+            ),
+            "night_assessment_charge_needed_kwh": (
+                round(self._night_controller.last_assessment.charge_needed_kwh, 3)
+                if self._night_controller.last_assessment is not None else None
+            ),
+            "night_break_even_price": (
+                round(
+                    ctx.avg_charge_price / self._night_controller._round_trip_efficiency,
+                    4,
+                )
+                if (
+                    self._night_controller.last_assessment is not None
+                    and ctx.avg_charge_price is not None
+                )
+                else None
+            ),
+            # Punkt 2: Tages-Profit (v4.3)
+            "profit_today_eur": float(self._persist.get("profit_today_eur", 0.0)),
         }
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -1294,12 +1343,9 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # BMS SoC-Limits + Entlade-Hysterese — muss vor _byd.update() liegen
             decision = self._apply_soc_guards(decision, state)
 
-            # BYD Nachtladung — immer aufrufen, damit BYD bei deaktiviertem Feature
-            # aus dem Lade-Modus herausgeführt wird (assessment=None → byd_charge=0 → Stop).
-            await self._byd.update(
-                ctx, now,
-                self._night_controller.last_assessment if state.pv_forecast_enabled else None,
-            )
+            # BYD Nachtladung
+            if state.pv_forecast_enabled:
+                await self._byd.update(ctx, now, self._night_controller.last_assessment)
 
             # Profit-Tracking
             self._track_profit(decision, state)

@@ -181,6 +181,13 @@ SENSORS: tuple[ZendureSensorEntityDescription, ...] = (
         native_unit_of_measurement="€",
         icon="mdi:cash",
     ),
+    ZendureSensorEntityDescription(
+        key="profit_today_eur",
+        translation_key="profit_today_eur",
+        runtime_key="profit_today_eur",
+        native_unit_of_measurement="€",
+        icon="mdi:cash-clock",
+    ),
 
     # --------------------------------------------------
     # DEVICE / MODE
@@ -213,6 +220,34 @@ SENSORS: tuple[ZendureSensorEntityDescription, ...] = (
     # --------------------------------------------------
     # NACHTLADUNG TRANSPARENZ (v3.2)
     # --------------------------------------------------
+    ZendureSensorEntityDescription(
+        key="night_break_even_price",
+        translation_key="night_break_even_price",
+        runtime_key="night_break_even_price",
+        native_unit_of_measurement="€/kWh",
+        icon="mdi:approximately-equal",
+    ),
+    ZendureSensorEntityDescription(
+        key="night_assessment_projected_at_5",
+        translation_key="night_assessment_projected_at_5",
+        runtime_key="night_assessment_projected_at_5",
+        native_unit_of_measurement="kWh",
+        icon="mdi:weather-sunset-up",
+    ),
+    ZendureSensorEntityDescription(
+        key="night_assessment_battery_at_18",
+        translation_key="night_assessment_battery_at_18",
+        runtime_key="night_assessment_battery_at_18",
+        native_unit_of_measurement="kWh",
+        icon="mdi:weather-sunset-down",
+    ),
+    ZendureSensorEntityDescription(
+        key="night_assessment_charge_needed_kwh",
+        translation_key="night_assessment_charge_needed_kwh",
+        runtime_key="night_assessment_charge_needed_kwh",
+        native_unit_of_measurement="kWh",
+        icon="mdi:battery-arrow-up",
+    ),
     ZendureSensorEntityDescription(
         key="night_charge_status",
         translation_key="night_charge_status",
