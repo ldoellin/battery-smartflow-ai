@@ -460,6 +460,11 @@ class NightWindowController:
 
         Gibt None zurück wenn ManualRule übernehmen soll (manual + charge/discharge).
         In allen anderen Fällen: immer ein vollständiges DecisionResult.
+
+        Ablauf:
+            1. assess()             — Energiebilanz berechnen (Physik, rein)
+            2. _apply_constraints() — harte Constraints (Emergency, Ladebedarf, System-State)
+            3. _apply_policy()      — Strategie (Entladen, Manual, Idle)
         """
         # Manuelles Laden/Entladen: ManualRule übernimmt
         if ctx.ai_mode == "manual" and ctx.manual_action not in (
@@ -468,9 +473,30 @@ class NightWindowController:
             return None
 
         self.last_assessment = self.assess(ctx)
-        a = self.last_assessment
 
-        # Emergency hat absolute Priorität – auch im Nachtfenster
+        decision = self._apply_constraints(engine, ctx, self.last_assessment)
+        if decision is not None:
+            return decision
+
+        return self._apply_policy(engine, ctx, self.last_assessment)
+
+    def _apply_constraints(
+        self,
+        engine: "DecisionEngine",
+        ctx: DecisionContext,
+        a: NightEnergyAssessment,
+    ) -> Optional[DecisionResult]:
+        """Harte Constraints — nicht-verhandelbar, physik- und systemgetrieben.
+
+        Gibt ein DecisionResult zurück wenn ein Constraint greift,
+        sonst None (weiter zu _apply_policy).
+
+        Constraints (in Priorität):
+            1. Emergency              — Notladung
+            2. Ladebedarf vorhanden   — Laden oder Pause (BYD-Sperre, Kapazität)
+            3. BYD noch aktiv         — Zendure halten bis BYD fertig
+        """
+        # 1. Emergency hat absolute Priorität — auch im Nachtfenster
         if ctx.soc <= ctx.emergency_soc:
             return DecisionResult(
                 action="emergency", ac_mode="input",
@@ -479,7 +505,7 @@ class NightWindowController:
                 reason="emergency_latched_charge",
             )
 
-        # ── Schutz hat absolute Priorität ──────────────────────────────────────
+        # 2. Ladebedarf: Brücke oder Abend nicht gedeckt
         if not a.bridge_covered or not a.evening_covered:
             if engine._byd_blocks_charge(ctx):
                 return DecisionResult(
@@ -505,16 +531,31 @@ class NightWindowController:
                 reason="night_charge_pause",
             )
 
-        # ── Brücke + Abend gedeckt ──────────────────────────────────────────────
+        # 3. BYD lädt noch oder Ladebedarf aus letztem Zyklus → Zendure halten
         if ctx.night_charge_required or ctx.night_charge_active:
-            # BYD lädt noch oder Bedarf aus letztem Zyklus → Zendure halten
             return DecisionResult(
                 action="idle", ac_mode="input",
                 charge_w=0.0, discharge_w=0.0,
                 reason="night_charge_pause",
             )
 
-        # ── Manual constant_discharge: Schutz gilt, keine Profitabilitätsprüfung ─
+        return None  # kein Constraint aktiv → Policy entscheidet
+
+    def _apply_policy(
+        self,
+        engine: "DecisionEngine",
+        ctx: DecisionContext,
+        a: NightEnergyAssessment,
+    ) -> DecisionResult:
+        """Strategie-Schicht — wird nur erreicht wenn alle Constraints erfüllt sind.
+
+        Policies (in Priorität):
+            1. Manual constant_discharge — Entladen erzwungen, Schutzguards aktiv,
+                                           keine Profitabilitätsprüfung
+            2. Auto profitable discharge — Entladen wenn Break-Even überschritten
+            3. Idle                      — kein Eingriff nötig
+        """
+        # 1. Manual constant_discharge: Schutzguards greifen, kein Profit-Check
         if ctx.ai_mode == "manual" and ctx.manual_action == MANUAL_CONST_DISCHARGE:
             if engine._wallbox_blocks_discharge(ctx):
                 return DecisionResult(
@@ -534,7 +575,7 @@ class NightWindowController:
                 reason="manual_constant_discharge",
             )
 
-        # ── Entladen: nur wenn nach Wandlungsverlusten profitabel ──────────────
+        # 2. Auto: Entladen wenn nach Wandlungsverlusten profitabel
         if (
             not engine._byd_blocks_discharge(ctx)
             and not engine._wallbox_blocks_discharge(ctx)
@@ -550,6 +591,7 @@ class NightWindowController:
                     reason="night_discharge_profitable",
                 )
 
+        # 3. Kein Eingriff nötig
         return DecisionResult(
             action="idle", ac_mode="input",
             charge_w=0.0, discharge_w=0.0,
