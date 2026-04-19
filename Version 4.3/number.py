@@ -329,12 +329,17 @@ class ZendureSmartFlowNumber(NumberEntity):
             )
 
     @property
-    def native_value(self) -> float:
-        return float(
+    def native_value(self) -> float | int:
+        value = float(
             self.coordinator.runtime_settings.get(
                 self.entity_description.runtime_key, 0
             )
         )
+        # Ganzzahligen Step → int zurückgeben, damit HA keine Nachkommastelle anzeigt
+        step = self.entity_description.native_step
+        if step is not None and step == int(step) and value == int(value):
+            return int(value)
+        return value
 
     async def async_set_native_value(self, value: float) -> None:
         self.coordinator.runtime_settings[self.entity_description.runtime_key] = float(value)
