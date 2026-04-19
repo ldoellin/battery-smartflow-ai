@@ -497,9 +497,8 @@ class NightWindowController:
         sonst None (weiter zu _apply_system_guards).
 
         Constraints (in Priorität):
-            1. Emergency              — Notladung
-            2. Ladebedarf vorhanden   — Laden oder Pause (getrieben durch bridge/evening)
-            3. BYD-Systemzustand      — Zendure halten bis BYD-Zyklus abgeschlossen
+            1. Emergency            — Notladung
+            2. Ladebedarf vorhanden — Laden oder Pause (getrieben durch bridge/evening)
         """
         # 1. Emergency hat absolute Priorität — auch im Nachtfenster
         if ctx.soc <= ctx.emergency_soc:
@@ -538,14 +537,6 @@ class NightWindowController:
                 reason="night_charge_pause",
             )
 
-        # 3. BYD-Systemzustand: lädt noch oder Ladebedarf aus letztem Zyklus
-        if ctx.night_charge_required or ctx.night_charge_active:
-            return DecisionResult(
-                action="idle", ac_mode="input",
-                charge_w=0.0, discharge_w=0.0,
-                reason="night_charge_pause",
-            )
-
         return None  # kein Energie-Constraint aktiv → System-Guards prüfen
 
     def _apply_system_guards(
@@ -559,21 +550,35 @@ class NightWindowController:
         kein Ladebedarf). Trennt Geräte-Koordinationslogik von Energie-Physik und Strategie.
 
         Guards (in Priorität):
-            1. BYD lädt  → kein Entladen (Energie-Loop verhindern)
-            2. Wallbox   → Entladen auf 0 W drosseln (Output-Modus halten, kein Netzstrom)
+            1. Wallbox   → Output-Modus halten, 0 W abgeben (kein Netzstrom, schnelle Reaktion)
+            2. BYD lädt  → kein Entladen (Energie-Loop verhindern)
+            3. BYD-Zyklus aktiv → Zendure halten bis BYD-Ladezyklus abgeschlossen
+
+        Hinweis zu _bridge_reserve_blocks_discharge(): im NWC-Pfad redundant.
+        Wenn hier: bridge_covered = True → battery_usable >= bridge_kwh + nighttime_kwh
+        → battery_usable > bridge_kwh → bridge_reserve immer False.
+        (Gilt strikt solange nighttime_kwh > 0, was im 00–05h-Fenster immer der Fall ist.)
         """
+        # Wallbox zuerst: Output-Modus halten, aber 0 W abgeben
+        # (Priorität über BYD — spiegelt das ursprüngliche manual-Policy-Verhalten)
+        if engine._wallbox_blocks_discharge(ctx):
+            return DecisionResult(
+                action="discharge", ac_mode="output",
+                charge_w=0.0, discharge_w=0.0,
+                reason="night_guard_wallbox",
+            )
         if engine._byd_blocks_discharge(ctx):
             return DecisionResult(
                 action="idle", ac_mode="input",
                 charge_w=0.0, discharge_w=0.0,
                 reason="night_guard_byd_charging",
             )
-        if engine._wallbox_blocks_discharge(ctx):
-            # Output-Modus halten, aber nichts abgeben — kein Moduswechsel auf idle
+        # BYD-Systemzustand: lädt noch oder Ladebedarf aus letztem Zyklus
+        if ctx.night_charge_required or ctx.night_charge_active:
             return DecisionResult(
-                action="discharge", ac_mode="output",
+                action="idle", ac_mode="input",
                 charge_w=0.0, discharge_w=0.0,
-                reason="night_guard_wallbox",
+                reason="night_charge_pause",
             )
         return None  # keine Guards aktiv → Policy entscheidet
 
