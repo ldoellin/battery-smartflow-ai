@@ -149,6 +149,36 @@
       }
     }
   },
+  "services": {
+    "set_mode": {
+      "name": "Set operating mode",
+      "description": "Changes the AI operating mode of the battery management system.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Integration instance",
+          "description": "The Battery SmartFlow AI integration instance to control."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "The operating mode to activate (automatic, summer, winter, or manual)."
+        }
+      }
+    },
+    "set_manual_action": {
+      "name": "Set manual action",
+      "description": "Sets the manual battery action when the integration is in manual mode.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Integration instance",
+          "description": "The Battery SmartFlow AI integration instance to control."
+        },
+        "action": {
+          "name": "Action",
+          "description": "The manual action to perform (standby, charge, or discharge)."
+        }
+      }
+    }
+  },
   "entity": {
     "select": {
       "ai_mode": {

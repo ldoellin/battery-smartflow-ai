@@ -149,6 +149,36 @@
       }
     }
   },
+  "services": {
+    "set_mode": {
+      "name": "Bedrijfsmodus instellen",
+      "description": "Wijzigt de AI-bedrijfsmodus van het batterijbeheersysteem.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Integratie-instantie",
+          "description": "De Battery SmartFlow AI integratie-instantie die bestuurd moet worden."
+        },
+        "mode": {
+          "name": "Modus",
+          "description": "De te activeren bedrijfsmodus (automatic, summer, winter of manual)."
+        }
+      }
+    },
+    "set_manual_action": {
+      "name": "Handmatige actie instellen",
+      "description": "Stelt de handmatige batterijactie in wanneer de integratie in handmatige modus is.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Integratie-instantie",
+          "description": "De Battery SmartFlow AI integratie-instantie die bestuurd moet worden."
+        },
+        "action": {
+          "name": "Actie",
+          "description": "De uit te voeren handmatige actie (standby, laden of ontladen)."
+        }
+      }
+    }
+  },
   "entity": {
     "select": {
       "ai_mode": {

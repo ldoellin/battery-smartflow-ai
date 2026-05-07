@@ -27,6 +27,37 @@
     }
   },
 
+  "services": {
+    "set_mode": {
+      "name": "Betriebsmodus setzen",
+      "description": "Setzt den KI-Betriebsmodus des Batteriemanagementsystems.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Integration",
+          "description": "Die Battery SmartFlow AI Instanz, die gesteuert werden soll."
+        },
+        "mode": {
+          "name": "Modus",
+          "description": "Der zu aktivierende Betriebsmodus (automatic, summer, winter, manual)."
+        }
+      }
+    },
+    "set_manual_action": {
+      "name": "Manuelle Aktion setzen",
+      "description": "Setzt die manuelle Aktion, wenn die Integration im manuellen Modus ist.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Integration",
+          "description": "Die Battery SmartFlow AI Instanz, die gesteuert werden soll."
+        },
+        "action": {
+          "name": "Aktion",
+          "description": "Die auszuführende manuelle Aktion (standby, charge, discharge)."
+        }
+      }
+    }
+  },
+
   "entity": {
     "select": {
       "ai_mode": { "name": "Betriebsmodus" },

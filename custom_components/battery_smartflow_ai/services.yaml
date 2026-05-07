@@ -1,1 +1,32 @@
-# Platzhalter für spätere API-Services
+set_mode:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: battery_smartflow_ai
+    mode:
+      required: true
+      selector:
+        select:
+          options:
+            - automatic
+            - summer
+            - winter
+            - manual
+
+set_manual_action:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: battery_smartflow_ai
+    action:
+      required: true
+      selector:
+        select:
+          options:
+            - standby
+            - charge
+            - discharge

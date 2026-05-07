@@ -149,6 +149,36 @@
       }
     }
   },
+  "services": {
+    "set_mode": {
+      "name": "Définir le mode de fonctionnement",
+      "description": "Modifie le mode de fonctionnement IA du système de gestion de batterie.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instance d'intégration",
+          "description": "L'instance Battery SmartFlow AI à contrôler."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Le mode de fonctionnement à activer (automatic, summer, winter ou manual)."
+        }
+      }
+    },
+    "set_manual_action": {
+      "name": "Définir l'action manuelle",
+      "description": "Définit l'action manuelle pour la batterie lorsque l'intégration est en mode manuel.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Instance d'intégration",
+          "description": "L'instance Battery SmartFlow AI à contrôler."
+        },
+        "action": {
+          "name": "Action",
+          "description": "L'action manuelle à effectuer (standby, charge ou discharge)."
+        }
+      }
+    }
+  },
   "entity": {
     "select": {
       "ai_mode": {
