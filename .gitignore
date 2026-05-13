@@ -1,3 +1,12 @@
+# Interne Projektdokumentation (vertraulich)
+ARCHITECTURE.md
+CODE_MAP.md
+claude.md
+DEBUG_NOTES.md
+ENTITY_REGISTRY.md
+PATTERN_ANALYSIS.md
+Version */
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
