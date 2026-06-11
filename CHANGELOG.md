@@ -1,5 +1,77 @@
 # Changelog — Battery SmartFlow AI
 
+## v4.3.3 (2026-06-11)
+
+### Stabilität — P1-Fixes aus Code Review (REVIEW_REPORT.md)
+
+**Flash-Schonung: Store-Save entkoppelt (I1)**
+`_persist` wurde bisher bei jedem 10-s-Zyklus auf `.storage` geschrieben (~8 600
+Writes/Tag). Jetzt verzögertes Speichern via `Store.async_delay_save` (60 s,
+gebündelt); sofortiges Speichern nur noch bei Moduswechsel und Shutdown
+(`async_shutdown` flusht). Der Store schreibt offene Saves bei HA-Stop automatisch.
+
+**Latenter Crash im Preis-Parser behoben (S1)**
+`dt_util.replace(dt, tzinfo=tz)` existiert nicht in `homeassistant.util.dt` —
+naive Zeitstempel in Preisdaten hätten einen AttributeError und damit
+Unavailability aller Entities ausgelöst. Korrigiert zu `dt.replace(tzinfo=tz)`.
+
+**Setpoint-Setter: Cache nur bei Erfolg (S3)**
+`last_set_mode/input_w/output_w` wurden vor dem Service-Call gesetzt
+(`blocking=False`, keine Fehlerbehandlung) — fehlgeschlagene Kommandos wurden
+nie wiederholt. Jetzt `blocking=True` mit try/except; bei Fehler bleibt der
+Cache alt → automatischer Retry im nächsten Zyklus. Redundantes Überschreiben
+von `last_set_output_w` in `_apply_setpoints` entfernt.
+
+**Fehler-Isolation im Update-Zyklus (S2)**
+Preis-Parsing, BYD-Nachtlade-Update und Profit-Tracking sind einzeln
+abgesichert und degradieren (Zyklus läuft weiter, `engine_health` zeigt
+Preisprobleme an), statt alle ~30 Entities unavailable zu schalten.
+Unerwartete Fehler werden jetzt mit Traceback geloggt (`_LOGGER.exception`).
+
+**BYD-Leistungs-Call abgesichert (S4)**
+`input_number.set_value` in `byd_manager.update()` analog `_set_mode` mit
+try/except; Cache-Update nur bei Erfolg.
+
+**Moduswechsel sofort persistiert (S6)**
+ai_mode/manual_action/season_override werden bei Auswahl sofort gespeichert —
+ein Neustart ≤10 s nach Umschalten verliert den Modus nicht mehr.
+
+**Single-Instance-Schutz im Config Flow (S7)**
+unique_id aus der AC-Mode-Entität + `_abort_if_unique_id_configured`, plus
+Daten-Vergleich für Alt-Einträge ohne unique_id. Verhindert zwei Einträge,
+die dasselbe Zendure-Gerät gegeneinander steuern. Abort-Übersetzungen in
+de/en/fr/strings.json ergänzt.
+
+**Robustes Config-Parsing (S9)**
+`_get_battery_capacity()` nutzt `_to_float` statt ungeschütztem `float()` —
+kein Setup-Crash mehr bei korruptem `pack_capacity_kwh`.
+
+---
+
+## v4.3.2 (2026-06-08)
+
+### Übernahme aus offiziellem PalmManiac-Branch
+
+**Hauslast-Berechnung bei AC-Ladung (PalmManiac 4.0.6)**
+Bei AC-Ladung der Zendure-Batterie wurde die Ladeleistung über `grid_import`
+fälschlich als zusätzlicher Hausverbrauch gewertet. Korrigiert durch Abzug von
+`battery_charge_w` in [coordinator.py](custom_components/battery_smartflow_ai/coordinator.py)
+`_read_sensors()`. Betrifft alle abgeleiteten Entscheidungen während aktiver
+AC-Netzladung.
+
+**DB-Wachstum durch große Sensor-Attribute (PalmManiac 4.2.0-Beta2)**
+Bisher wurde der vollständige interne `details`-Dict an alle ~25 Sensoren als
+`extra_state_attributes` gehängt. Bei 10-s-Updates ließ das die Home-Assistant-
+Recorder-DB unnötig schnell wachsen. Nur noch `device_profile` bekommt eine
+gekürzte Profil-/Diagnoseübersicht.
+
+**Stabile Zeitstempel (PalmManiac 4.2.0-Beta2)**
+`next_action_time` wird nicht mehr bei jedem Regelzyklus auf die aktuelle
+Uhrzeit gesetzt, sondern nur beim Start einer Aktion. Helper `_stable_iso_minute`
+rundet zusätzlich auf volle Minuten, um Sekunden-Jitter im Recorder zu vermeiden.
+
+---
+
 ## v4.3.1 (2026-04-19)
 
 ### Refactoring — Code-Qualität (kein Verhaltens-Änderung für Endnutzer)

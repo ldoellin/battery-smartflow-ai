@@ -351,6 +351,7 @@ class NightWindowController:
     def __init__(self, round_trip_efficiency: float = 0.90) -> None:
         self._round_trip_efficiency = round_trip_efficiency
         self.last_assessment: Optional[NightEnergyAssessment] = None
+        self._z_charging_active: bool = False  # True solange Zendure im GO-Fenster lädt
 
     # --------------------------------------------------
     # Energiebilanz — einzige Implementierung dieser Logik
@@ -385,10 +386,9 @@ class NightWindowController:
             evening_covered = False
 
         if not bridge_covered:
-            charge_needed = (
-                0.0 if battery_usable >= ctx.bridge_kwh
-                else max(0.0, ctx.bridge_kwh - battery_usable)
-            )
+            # Korrekter Ladebedarf: Ziel am 05:00 ist bridge_kwh kWh → projected_at_5 muss stimmen.
+            # Nighttime-Verbrauch muss eingerechnet werden, nicht nur der aktuelle Stand.
+            charge_needed = max(0.0, ctx.bridge_kwh - projected_at_5)
         elif not evening_covered:
             charge_needed = max(0.0, evening_need - battery_at_18)
         else:
@@ -529,13 +529,18 @@ class NightWindowController:
                     reason="night_charge_no_capacity",
                     layer="constraints",
                 )
-            if a.z_charge_kwh >= 0.2:
+            # Starten: z_charge >= 0.2 kWh.  Fortsetzen: Flag gesetzt + noch Bedarf vorhanden.
+            # _z_charging_active ist ein In-Memory-Flag — kein Persist, kein prev_charge_w.
+            # Damit robust gegen Coordinator-Reload oder kurze Idle-Zyklen durch _apply_soc_guards.
+            if a.z_charge_kwh >= 0.2 or (self._z_charging_active and a.z_charge_kwh > 0):
+                self._z_charging_active = True
                 return DecisionResult(
                     action="charge", ac_mode="input",
                     charge_w=ctx.max_charge_w, discharge_w=0.0,
                     reason="night_charge_go_window",
                     layer="constraints",
                 )
+            self._z_charging_active = False
             return DecisionResult(
                 action="idle", ac_mode="input",
                 charge_w=0.0, discharge_w=0.0,
@@ -543,6 +548,7 @@ class NightWindowController:
                 layer="constraints",
             )
 
+        self._z_charging_active = False  # Brücke + Abend gedeckt → Laden abgeschlossen
         return None  # kein Energie-Constraint aktiv → System-Guards prüfen
 
     def _apply_system_guards(
@@ -615,17 +621,14 @@ class NightWindowController:
                 layer="policy",
             )
 
-        # 2. Auto: Entladen wenn nach Wandlungsverlusten profitabel
-        if (
-            ctx.soc > ctx.soc_min + 5
-            and self.discharge_is_profitable(ctx)
-        ):
+        # 2. Auto: Entladen zur Last-Deckung (Brücke/Abend bereits durch _apply_constraints gesichert)
+        if ctx.soc > ctx.soc_min + 5:
             discharge_w = engine._delta_discharge(ctx)
             if discharge_w > 0:
                 return DecisionResult(
                     action="discharge", ac_mode="output",
                     charge_w=0.0, discharge_w=discharge_w,
-                    reason="night_discharge_profitable",
+                    reason="night_discharge_cover_load",
                     layer="policy",
                 )
 
@@ -971,6 +974,7 @@ class DecisionEngine:
         try:
             if not self._night_controller.is_active(ctx):
                 self._night_controller.last_assessment = None
+                self._night_controller._z_charging_active = False
                 self._planning_result = self._evaluate_adaptive_planning(ctx)
             else:
                 result = self._night_controller.evaluate(self, ctx)

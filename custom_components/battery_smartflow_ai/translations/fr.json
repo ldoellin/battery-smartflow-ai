@@ -107,6 +107,9 @@
           "output_limit_entity": "Puissance de décharge réglable en watts."
         }
       }
+    },
+    "abort": {
+      "already_configured": "L'appareil est déjà configuré"
     }
   },
   "entity": {
@@ -139,22 +142,50 @@
       }
     },
     "number": {
-      "battery_packs": { "name": "Nombre de packs batterie" },
-      "soc_min": { "name": "SoC minimum" },
-      "soc_max": { "name": "SoC maximum" },
-      "max_charge": { "name": "Puissance de charge max." },
-      "max_discharge": { "name": "Puissance de décharge max." },
-      "emergency_charge": { "name": "Puissance de charge d’urgence" },
-      "emergency_soc": { "name": "Charge d’urgence à partir de SoC" },
-      "very_expensive_threshold": { "name": "Seuil très cher" },
-      "profit_margin_pct": { "name": "Marge (%)" },
-      "peak_factor": { "name": "Facteur de pic" }
+      "battery_packs": {
+        "name": "Nombre de packs batterie"
+      },
+      "soc_min": {
+        "name": "SoC minimum"
+      },
+      "soc_max": {
+        "name": "SoC maximum"
+      },
+      "max_charge": {
+        "name": "Puissance de charge max."
+      },
+      "max_discharge": {
+        "name": "Puissance de décharge max."
+      },
+      "emergency_charge": {
+        "name": "Puissance de charge d’urgence"
+      },
+      "emergency_soc": {
+        "name": "Charge d’urgence à partir de SoC"
+      },
+      "very_expensive_threshold": {
+        "name": "Seuil très cher"
+      },
+      "profit_margin_pct": {
+        "name": "Marge (%)"
+      },
+      "peak_factor": {
+        "name": "Facteur de pic"
+      }
     },
     "sensor": {
-      "device_profile": { "name": "Profil d’appareil actif" },
-      "adaptive_peak_active": { "name": "Pic adaptatif détecté" },
-      "price_daily_average": { "name": "Prix moyen journalier" },
-      "current_peak_threshold": { "name": "Seuil de pic actuel" },
+      "device_profile": {
+        "name": "Profil d’appareil actif"
+      },
+      "adaptive_peak_active": {
+        "name": "Pic adaptatif détecté"
+      },
+      "price_daily_average": {
+        "name": "Prix moyen journalier"
+      },
+      "current_peak_threshold": {
+        "name": "Seuil de pic actuel"
+      },
       "engine_health": {
         "name": "État du moteur",
         "state": {
@@ -259,18 +290,42 @@
           "emergency": "Charge d’urgence"
         }
       },
-      "next_action_time": { "name": "Heure de début de la prochaine action" },
-      "ai_debug": { "name": "Debug IA" },
-      "house_load": { "name": "Charge maison" },
-      "price_now": { "name": "Prix actuel de l’électricité" },
-      "avg_charge_price": { "name": "Prix moyen de charge batterie" },
-      "profit_eur": { "name": "Économies / profit (total)" },
-      "profit_today_eur": { "name": "Profit aujourd'hui" },
-      "night_break_even_price": { "name": "Prix seuil de rentabilité nuit" },
-      "night_assessment_projected_at_5": { "name": "Énergie nuit à 05:00" },
-      "night_assessment_battery_at_18": { "name": "Énergie nuit à 18:00" },
-      "night_assessment_charge_needed_kwh": { "name": "Charge nécessaire nuit" },
-      "total_available_kwh": { "name": "Énergie disponible (total)" }
+      "next_action_time": {
+        "name": "Heure de début de la prochaine action"
+      },
+      "ai_debug": {
+        "name": "Debug IA"
+      },
+      "house_load": {
+        "name": "Charge maison"
+      },
+      "price_now": {
+        "name": "Prix actuel de l’électricité"
+      },
+      "avg_charge_price": {
+        "name": "Prix moyen de charge batterie"
+      },
+      "profit_eur": {
+        "name": "Économies / profit (total)"
+      },
+      "profit_today_eur": {
+        "name": "Profit aujourd'hui"
+      },
+      "night_break_even_price": {
+        "name": "Prix seuil de rentabilité nuit"
+      },
+      "night_assessment_projected_at_5": {
+        "name": "Énergie nuit à 05:00"
+      },
+      "night_assessment_battery_at_18": {
+        "name": "Énergie nuit à 18:00"
+      },
+      "night_assessment_charge_needed_kwh": {
+        "name": "Charge nécessaire nuit"
+      },
+      "total_available_kwh": {
+        "name": "Énergie disponible (total)"
+      }
     }
   }
 }

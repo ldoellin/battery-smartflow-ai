@@ -118,6 +118,9 @@ class ZendureSmartFlowSelect(SelectEntity):
 
         self.coordinator.runtime_mode[self.entity_description.runtime_key] = option
         self.async_write_ha_state()
+        # Sofort persistieren — Neustart kurz nach Umschalten darf den Modus
+        # nicht verlieren (sonst fällt z.B. "manual" auf Automatik zurück)
+        await self.coordinator.async_save_mode()
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()

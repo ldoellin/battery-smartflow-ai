@@ -2,6 +2,9 @@
   "title": "Battery SmartFlow AI",
 
   "config": {
+    "abort": {
+      "already_configured": "Gerät ist bereits konfiguriert"
+    },
     "error": {
       "grid_split_missing": "Bei \"Zwei Sensoren\" müssen Bezug und Einspeisung beide ausgewählt werden."
     },

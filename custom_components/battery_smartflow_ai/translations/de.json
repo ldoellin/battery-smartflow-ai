@@ -1,5 +1,8 @@
 {
   "config": {
+    "abort": {
+      "already_configured": "Gerät ist bereits konfiguriert"
+    },
     "step": {
       "user": {
         "title": "Battery SmartFlow AI einrichten",
@@ -318,27 +321,11 @@
           "bridge_reserve_block": "Entladung pausiert (Brückenreserve-Schutz)"
         }
       },
-      "next_planned_action": {
-        "name": "Geplante nächste Aktion",
-        "state": {
-          "none": "Keine Aktion geplant",
-          "charge": "Geplantes Laden",
-          "discharge": "Geplante Entladung",
-          "wait": "Warten",
-          "emergency": "Notladung"
-        }
-      },
       "next_action_time": { "name": "Startzeit nächste Aktion" },
-      "ai_debug": { "name": "KI-Debug" },
       "house_load": { "name": "Hauslast" },
       "price_now": { "name": "Aktueller Strompreis" },
       "avg_charge_price": { "name": "Ø Ladepreis Akku" },
       "profit_eur": { "name": "Ersparnis / Gewinn (gesamt)" },
-      "profit_today_eur": { "name": "Gewinn heute" },
-      "night_break_even_price": { "name": "Nacht Break-Even Preis" },
-      "night_assessment_projected_at_5": { "name": "Nacht Energie bei 05:00" },
-      "night_assessment_battery_at_18": { "name": "Nacht Energie bei 18:00" },
-      "night_assessment_charge_needed_kwh": { "name": "Nacht Ladebedarf" },
       "night_charge_status": {
         "name": "Nachtladung Status",
         "state": {
@@ -354,7 +341,25 @@
       "night_charge_byd_kwh": { "name": "Nachtladung BYD Ladung" },
       "night_charge_zendure_target_soc": { "name": "Nachtladung Zendure Ziel-SoC" },
       "night_charge_zendure_kwh": { "name": "Nachtladung Zendure Ladung" },
-      "total_available_kwh": { "name": "Verfügbare Energie (Gesamt)" }
+      "total_available_kwh": { "name": "Verfügbare Energie (Gesamt)" },
+      "next_action_state": {
+        "name": "Nächste Aktion",
+        "state": {
+          "none": "Keine Aktion",
+          "planned_charge": "Laden geplant",
+          "planned_discharge": "Entladen geplant",
+          "charging_active": "Laden aktiv",
+          "discharging_active": "Entladen aktiv",
+          "manual_charge": "Manuelles Laden",
+          "manual_discharge": "Manuelles Entladen",
+          "emergency_charge": "Notladung"
+        }
+      },
+      "profit_today_eur": { "name": "Tagesersparnis" },
+      "night_break_even_price": { "name": "Nachtladung Break-Even" },
+      "night_assessment_projected_at_5": { "name": "Nachtbewertung: PV um 5 Uhr" },
+      "night_assessment_battery_at_18": { "name": "Nachtbewertung: Batterie um 18 Uhr" },
+      "night_assessment_charge_needed_kwh": { "name": "Nachtbewertung: Benötigte Ladung" }
     }
   }
 }

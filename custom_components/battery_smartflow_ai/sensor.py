@@ -415,11 +415,13 @@ class ZendureSmartFlowSensor(CoordinatorEntity, SensorEntity):
         return attrs
 
     def _handle_coordinator_update(self) -> None:
-        data = self.coordinator.data or {}
-        details = dict(data.get("details") or {})
+        # PalmManiac 4.2.0-Beta2: details-Dict NICHT pauschal an jeden Sensor hängen
+        # (sonst speichert der HA-Recorder pro Sensor den vollen Block bei jedem Update
+        # → massives DB-Wachstum). Nur device_profile bekommt eine gekürzte Übersicht.
+        attrs: dict | None = None
 
         if self.entity_description.runtime_key == "device_profile":
-            details.update(self._build_device_profile_attributes())
+            attrs = self._build_device_profile_attributes()
 
-        self._attr_extra_state_attributes = details
+        self._attr_extra_state_attributes = attrs
         super()._handle_coordinator_update()

@@ -58,6 +58,16 @@ class ZendureSmartFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None):
         if user_input is not None:
+            # Single-Instance-Schutz: zwei Einträge auf dieselbe Zendure-Steuerung
+            # würden konkurrierende Setpoints senden
+            ac_mode_entity = user_input[CONF_AC_MODE_ENTITY]
+            await self.async_set_unique_id(ac_mode_entity)
+            self._abort_if_unique_id_configured()
+            # Bestehende Einträge ohne unique_id (vor v4.3.3) ebenfalls abfangen
+            for existing in self._async_current_entries():
+                if existing.data.get(CONF_AC_MODE_ENTITY) == ac_mode_entity:
+                    return self.async_abort(reason="already_configured")
+
             self._user_input = dict(user_input)
             return await self.async_step_grid()
 

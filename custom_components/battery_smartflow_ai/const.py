@@ -10,7 +10,7 @@ DOMAIN = "battery_smartflow_ai"
 INTEGRATION_NAME = "Battery SmartFlow AI"
 INTEGRATION_MANUFACTURER = "PalmManiac"
 INTEGRATION_MODEL = "Home Assistant Integration"
-INTEGRATION_VERSION = "4.3.1-custom"
+INTEGRATION_VERSION = "4.3.3-custom"
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
@@ -96,13 +96,13 @@ DEFAULT_INSTALLED_PV_WP = 0.0
 # PV-Forecast Defaults (v3.2)
 DEFAULT_ADDITIONAL_BATTERY_CAPACITY_KWH = 0.0
 DEFAULT_PV_FORECAST_ENABLED      = 0.0
-DEFAULT_DAYTIME_CONSUMPTION_W    = 500.0   # Watt (08–18 Uhr, 10h → 5 kWh Direktverbrauch)
-DEFAULT_NIGHTTIME_CONSUMPTION_W  = 500.0   # Watt (Nacht + Brücke 05–08 Uhr)
+DEFAULT_DAYTIME_CONSUMPTION_W    = 500   # Watt (08–18 Uhr, 10h → 5 kWh Direktverbrauch)
+DEFAULT_NIGHTTIME_CONSUMPTION_W  = 500   # Watt (Nacht + Brücke 05–08 Uhr)
 SETTING_PV_OPTIMISM_FACTOR       = "pv_optimism_factor"   # PV-Skalierung für Nachtlade-Mengenkalkulation
 DEFAULT_PV_OPTIMISM_FACTOR       = 1.5    # P10 × 1.5 → konservativere Nachtladung (Spielraum für PV)
 DEFAULT_WALLBOX_BLOCK_ENABLED    = 1.0     # Standard: Entladung bei Schnellladen verhindern
 DEFAULT_PV_DAILY_YIELD_FALLBACK_KWH = 25.0  # Fallback wenn kein Solcast + keine History
-DEFAULT_EVENING_CONSUMPTION_W    = 500.0   # Watt (18–24 Uhr, 6h → 3 kWh; entspricht bisherigem bridge_kwh×2)
+DEFAULT_EVENING_CONSUMPTION_W    = 500   # Watt (18–24 Uhr, 6h → 3 kWh; entspricht bisherigem bridge_kwh×2)
 
 # --------------------------------------------------
 # Device profiles (V1.5.x / V3.2.0 overrides)
@@ -167,8 +167,8 @@ SETTING_PEAK_FACTOR = "peak_factor"
 # ==================================================
 UPDATE_INTERVAL = 10  # seconds
 
-DEFAULT_SOC_MIN = 12.0
-DEFAULT_SOC_MAX = 100.0  # Herstellerempfehlung ✔
+DEFAULT_SOC_MIN = 12
+DEFAULT_SOC_MAX = 100  # Herstellerempfehlung ✔
 
 DEFAULT_MAX_CHARGE = 2400.0
 DEFAULT_MAX_DISCHARGE = 700.0
@@ -177,7 +177,7 @@ DEFAULT_PRICE_THRESHOLD = 0.35
 DEFAULT_VERY_EXPENSIVE_THRESHOLD = 0.49
 
 DEFAULT_EMERGENCY_SOC = 8.0
-DEFAULT_EMERGENCY_CHARGE = 1200.0
+DEFAULT_EMERGENCY_CHARGE = 1200
 
 DEFAULT_PROFIT_MARGIN_PCT = 27.0
 

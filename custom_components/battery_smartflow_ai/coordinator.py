@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dtime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -330,6 +330,11 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._hys_wallbox_pv    = _HysteresisState(delay_on_s=25, delay_off_s=300, threshold=500.0)
         self._hys_wallbox_grid  = _HysteresisState(delay_on_s=5,  delay_off_s=300, threshold=7000.0)
 
+        # Fehler-Flags für Log-Deduplizierung: pro Schlüssel nur einmal loggen,
+        # bis der betroffene Pfad wieder fehlerfrei läuft (verhindert Log-Flut
+        # bei persistenten Fehlern im 10-s-Zyklus)
+        self._err_flags: set[str] = set()
+
         self._store = Store(hass, STORE_VERSION, f"{DOMAIN}.{entry.entry_id}")
         self._persist: dict[str, Any] = {
             "runtime_mode": dict(self.runtime_mode),
@@ -413,11 +418,33 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # SOC-Delta der Downtime nicht als Transaktion werten
         self._persist["prev_soc"] = None
 
-    async def _save(self) -> None:
+    def _sync_persist(self) -> None:
         self._persist["runtime_mode"] = dict(self.runtime_mode)
         self._persist["byd_night_active"] = self._byd.night_active
         self._persist["byd_discharge_paused"] = self._byd.discharge_paused
+
+    async def _save(self) -> None:
+        """Sofortiges Speichern — nur für Moduswechsel und Shutdown."""
+        self._sync_persist()
         await self._store.async_save(self._persist)
+
+    def _schedule_save(self) -> None:
+        """Verzögertes Speichern (60 s) — bündelt die 10-s-Zyklen statt einem
+        Flash-Write pro Zyklus (~8 600/Tag). Store flusht offene Saves bei HA-Stop."""
+        self._sync_persist()
+        self._store.async_delay_save(self._data_to_save, 60)
+
+    def _data_to_save(self) -> dict[str, Any]:
+        return self._persist
+
+    async def async_save_mode(self) -> None:
+        """Persistiert Moduswechsel sofort — Neustart kurz nach Umschalten
+        darf ai_mode/manual_action/season_override nicht verlieren."""
+        await self._save()
+
+    async def async_shutdown(self) -> None:
+        await super().async_shutdown()
+        await self._save()
 
     def _state(self, entity_id: str | None) -> Any:
         if not entity_id:
@@ -455,45 +482,69 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def set_manual_action(self, action: str) -> None:
         self.runtime_mode["manual_action"] = action
 
+    # Setter-Prinzip: last_set_* erst NACH erfolgreichem Service-Call setzen.
+    # Schlägt der Call fehl (Entität unavailable, Zendure offline), bleibt der
+    # Cache auf dem alten Wert → automatischer Retry im nächsten Zyklus.
+
+    def _warn_once(self, key: str, msg: str, *args) -> None:
+        if key not in self._err_flags:
+            self._err_flags.add(key)
+            _LOGGER.warning(msg, *args)
+
+    def _exception_once(self, key: str, msg: str) -> None:
+        if key not in self._err_flags:
+            self._err_flags.add(key)
+            _LOGGER.exception(msg)
+
     async def _set_ac_mode(self, mode: str) -> None:
         current = self._state(self.entities.ac_mode)
         if current == mode:
             self._persist["last_set_mode"] = mode
             return
 
-        self._persist["last_set_mode"] = mode
-        await self.hass.services.async_call(
-            "select",
-            "select_option",
-            {"entity_id": self.entities.ac_mode, "option": mode},
-            blocking=False,
-        )
+        try:
+            await self.hass.services.async_call(
+                "select",
+                "select_option",
+                {"entity_id": self.entities.ac_mode, "option": mode},
+                blocking=True,
+            )
+            self._persist["last_set_mode"] = mode
+            self._err_flags.discard("set_ac_mode")
+        except Exception as err:  # noqa: BLE001
+            self._warn_once("set_ac_mode", "AC-Modus %s konnte nicht gesetzt werden: %s", mode, err)
 
     async def _set_input_limit(self, watts: float) -> None:
         val = int(round(float(watts), 0))
-        last = self._persist.get("last_set_input_w")
-        if last == val:
+        if self._persist.get("last_set_input_w") == val:
             return
-        self._persist["last_set_input_w"] = val
-        await self.hass.services.async_call(
-            "number",
-            "set_value",
-            {"entity_id": self.entities.input_limit, "value": val},
-            blocking=False,
-        )
+        try:
+            await self.hass.services.async_call(
+                "number",
+                "set_value",
+                {"entity_id": self.entities.input_limit, "value": val},
+                blocking=True,
+            )
+            self._persist["last_set_input_w"] = val
+            self._err_flags.discard("set_input")
+        except Exception as err:  # noqa: BLE001
+            self._warn_once("set_input", "Input-Limit %d W konnte nicht gesetzt werden: %s", val, err)
 
     async def _set_output_limit(self, watts: float) -> None:
         val = int(round(float(watts), 0))
-        last = self._persist.get("last_set_output_w")
-        if last == val:
+        if self._persist.get("last_set_output_w") == val:
             return
-        self._persist["last_set_output_w"] = val
-        await self.hass.services.async_call(
-            "number",
-            "set_value",
-            {"entity_id": self.entities.output_limit, "value": val},
-            blocking=False,
-        )
+        try:
+            await self.hass.services.async_call(
+                "number",
+                "set_value",
+                {"entity_id": self.entities.output_limit, "value": val},
+                blocking=True,
+            )
+            self._persist["last_set_output_w"] = val
+            self._err_flags.discard("set_output")
+        except Exception as err:  # noqa: BLE001
+            self._warn_once("set_output", "Output-Limit %d W konnte nicht gesetzt werden: %s", val, err)
 
     def _get_setting(self, key: str, default: float) -> float:
         try:
@@ -570,8 +621,19 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return blocked
 
+    def _stable_iso_minute(self, value: datetime | None) -> str | None:
+        # PalmManiac 4.2.0-Beta2: Zeitstempel auf volle Minute runden, damit
+        # Sekunden-/Microsecond-Jitter keine zusätzlichen Recorder-Einträge erzeugt.
+        if value is None:
+            return None
+        try:
+            dt = dt_util.as_local(value).replace(second=0, microsecond=0)
+            return dt.isoformat()
+        except Exception:
+            return None
+
     def _get_battery_capacity(self) -> float:
-        pack_capacity = float(self.entry.data.get(CONF_PACK_CAPACITY_KWH, 0))
+        pack_capacity = _to_float(self.entry.data.get(CONF_PACK_CAPACITY_KWH), 0.0)
 
         packs = self._get_setting(
             SETTING_BATTERY_PACKS,
@@ -621,7 +683,57 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
         if not raw:
-            return []
+            # Fallback: Octopus Go / SmartControl static timeslots
+            # Format: [{name, rate (cents/kWh as str), activation_rules: [{from_time, to_time}]}]
+            timeslots_raw = attrs.get("timeslots")
+            if not isinstance(timeslots_raw, list) or not timeslots_raw:
+                return []
+
+            def _parse_t(s: str) -> dtime | None:
+                try:
+                    p = s.split(":")
+                    return dtime(int(p[0]), int(p[1]), int(p[2]))
+                except Exception:
+                    return None
+
+            slots: list[tuple[dtime, dtime, float]] = []
+            for slot in timeslots_raw:
+                try:
+                    price = float(slot.get("rate", "0")) / 100.0  # cents → €
+                except (ValueError, TypeError):
+                    continue
+                for rule in slot.get("activation_rules", []):
+                    ft = _parse_t(rule.get("from_time", "00:00:00"))
+                    tt = _parse_t(rule.get("to_time", "00:00:00"))
+                    if ft is not None and tt is not None:
+                        slots.append((ft, tt, price))
+
+            if not slots:
+                return []
+
+            tz = dt_util.get_default_time_zone()
+            midnight = dtime(0, 0, 0)
+            start_hour = now.astimezone(tz).replace(minute=0, second=0, microsecond=0)
+            out: list[PricePoint] = []
+
+            for h in range(24):
+                t_start = start_hour + timedelta(hours=h)
+                t_end = t_start + timedelta(hours=1)
+                slot_time = t_start.time()
+
+                for (ft, tt, price) in slots:
+                    if tt == midnight:
+                        match = slot_time >= ft
+                    elif ft < tt:
+                        match = ft <= slot_time < tt
+                    else:  # crosses midnight
+                        match = slot_time >= ft or slot_time < tt
+                    if match:
+                        out.append(PricePoint(start=t_start, end=t_end, price=price))
+                        break
+
+            out.sort(key=lambda x: x.start)
+            return out
 
         if isinstance(raw, dict):
             raw = raw.get("rates") or raw.get("data") or raw.get("timeslots")
@@ -635,7 +747,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not dt:
                 return None
             if dt.tzinfo is None:
-                return dt_util.replace(dt, tzinfo=tz)
+                return dt.replace(tzinfo=tz)
             return dt.astimezone(tz)
 
         now = normalize(now)
@@ -903,8 +1015,13 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if grid_export < GRID_EPSILON:
             grid_export = 0.0
 
-        price_now    = self._get_price_now()
-        price_points = self._parse_price_points(now)
+        price_now = self._get_price_now()
+        try:
+            price_points = self._parse_price_points(now)
+            self._err_flags.discard("price_parse")
+        except Exception:  # noqa: BLE001
+            self._exception_once("price_parse", "Preis-Parsing fehlgeschlagen — Zyklus läuft ohne Preisdaten weiter")
+            price_points = []
 
         byd_charge_raw    = float(_to_float(self._state(self.entities.additional_battery_charge),    0.0) or 0.0)
         byd_discharge_raw = float(_to_float(self._state(self.entities.additional_battery_discharge), 0.0) or 0.0)
@@ -976,9 +1093,11 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         battery_raw         = self._state(self.entities.battery_ac_power)
         battery_power       = float(_to_float(battery_raw, 0.0) or 0.0)
         battery_discharge_w = max(0.0, battery_power)
+        # PalmManiac 4.0.6: AC-Ladeleistung darf nicht als Hauslast gezählt werden
+        battery_charge_w    = max(0.0, -battery_power)
         house_load = max(
             0.0,
-            grid_import + pv_w + battery_discharge_w - grid_export,
+            grid_import + pv_w + battery_discharge_w - grid_export - battery_charge_w,
         )
 
         season    = self._season_detection(pv_w=pv_w, export_w=grid_export, now=now)
@@ -1173,7 +1292,6 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self._set_ac_mode(ac_mode)
         await self._set_input_limit(in_w)
         await self._set_output_limit(out_w)
-        self._persist["last_set_output_w"] = out_w
 
         if ac_mode == ZENDURE_MODE_INPUT and in_w > 0.0:
             self._persist["power_state"] = "charging"
@@ -1182,8 +1300,11 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             self._persist["power_state"] = "idle"
 
+        # PalmManiac 4.2.0-Beta2: next_action_time nur beim Aktionsstart setzen
+        # (nicht jedes 10-s-Update), auf volle Minute gerundet → kein Recorder-Jitter.
         if self._persist["power_state"] != "idle":
-            self._persist["next_action_time"] = now.isoformat()
+            if not self._persist.get("next_action_time"):
+                self._persist["next_action_time"] = self._stable_iso_minute(now)
         else:
             self._persist["next_action_time"] = None
 
@@ -1337,37 +1458,70 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if state is None:
                 return self._sensor_invalid_payload()
 
-            ctx      = self._build_decision_context(state)
-            decision = self._engine.evaluate(ctx)
+            ctx             = self._build_decision_context(state)
+            engine_decision = self._engine.evaluate(ctx)
+
+            # night_charge_required wurde mit last_assessment des Vorzyklus gebaut → aktualisieren
+            if self._night_controller.last_assessment is not None:
+                ctx.night_charge_required = self._night_controller.last_assessment.charge_needed_kwh >= 0.2
+            else:
+                ctx.night_charge_required = False
 
             # BMS SoC-Limits + Entlade-Hysterese — muss vor _byd.update() liegen
-            decision = self._apply_soc_guards(decision, state)
+            decision = self._apply_soc_guards(engine_decision, state)
 
-            # BYD Nachtladung
+            # BYD Nachtladung — Fehler hier dürfen den Zendure-Zyklus nicht stoppen
             if state.pv_forecast_enabled:
-                await self._byd.update(ctx, now, self._night_controller.last_assessment)
+                try:
+                    await self._byd.update(ctx, now, self._night_controller.last_assessment)
+                    self._err_flags.discard("byd_update")
+                except Exception:  # noqa: BLE001
+                    self._exception_once("byd_update", "BYD-Nachtlade-Update fehlgeschlagen — Zyklus läuft weiter")
+                # BUG-010: BYD-Restart-Flags sofort persistieren (nicht erst nach
+                # bis zu 60 s delayed save) — sonst vergisst ein Stromausfall kurz
+                # nach Lade-Start den aktiven BYD-Modus
+                if (
+                    self._persist.get("byd_night_active") != self._byd.night_active
+                    or self._persist.get("byd_discharge_paused") != self._byd.discharge_paused
+                ):
+                    await self._save()
 
-            # Profit-Tracking
-            self._track_profit(decision, state)
+            # Profit-Tracking — reine Analytik, nicht zyklus-kritisch
+            try:
+                self._track_profit(decision, state)
+                self._err_flags.discard("profit")
+            except Exception:  # noqa: BLE001
+                self._exception_once("profit", "Profit-Tracking fehlgeschlagen — Zyklus läuft weiter")
 
-            # Persist prev_discharge / prev_charge für Delta-Controller
+            # Persist prev_discharge / prev_charge für Delta-Controller.
+            # prev_charge_w: Engine-Wert beibehalten wenn soc_guard kurz vetoed
+            # (verhindert P-Regler-Neustart von 0W bei kurzen BMS-Unterbrechungen).
+            _engine_charge_w = (
+                float(engine_decision.charge_w or 0.0)
+                if engine_decision.ac_mode == "input" else 0.0
+            )
+            _final_charge_w = (
+                float(decision.charge_w or 0.0)
+                if decision.ac_mode == "input" else 0.0
+            )
+            self._persist["prev_charge_w"]    = _engine_charge_w if _engine_charge_w > 0 else _final_charge_w
             self._persist["prev_discharge_w"] = float(decision.discharge_w or 0.0)
-            if decision.ac_mode == "input" and float(decision.charge_w or 0.0) > 0.0:
-                self._persist["prev_charge_w"] = float(decision.charge_w)
-            else:
-                self._persist["prev_charge_w"] = 0.0
 
             # Sollwerte setzen
             ac_mode, in_w, out_w = await self._apply_setpoints(decision, now)
 
-            # Persist + save
+            # Persist + save (verzögert, max. 1 Write/min)
             self._persist["debug"]   = "OK"
             self._persist["last_ts"] = now.isoformat()
-            await self._save()
+            self._schedule_save()
 
             return self._build_response_payload(ctx, decision, state, ac_mode, in_w, out_w)
 
         except Exception as err:
+            # Traceback nur beim ersten Fehler nach erfolgreichem Zyklus —
+            # Folgefehler loggt der DataUpdateCoordinator selbst (dedupliziert)
+            if self.last_update_success:
+                _LOGGER.exception("Update-Zyklus fehlgeschlagen")
             raise UpdateFailed(str(err)) from err
 
 

@@ -54,6 +54,8 @@ class BydNightChargeManager:
         # State-Flags (werden vom Coordinator via _load/_save persistiert)
         self.night_active: bool = False
         self.discharge_paused: bool = False
+        # Log-Dedup: Fehler beim Leistungs-Setzen nur einmal loggen bis zum nächsten Erfolg
+        self._power_set_failed: bool = False
 
     # --------------------------------------------------
     # PV-Forecast Fallback
@@ -213,13 +215,22 @@ class BydNightChargeManager:
                 _last_ts = self._persist.get("last_set_byd_power_ts")
                 _elapsed = (now.timestamp() - _last_ts) if _last_ts is not None else float("inf")
                 if byd_power_w != _last_pw and _elapsed >= 300:
-                    await self.hass.services.async_call(
-                        "input_number",
-                        "set_value",
-                        {"entity_id": self.entities.additional_battery_power, "value": byd_power_w},
-                    )
-                    self._persist["last_set_byd_power_w"] = byd_power_w
-                    self._persist["last_set_byd_power_ts"] = now.timestamp()
+                    try:
+                        await self.hass.services.async_call(
+                            "input_number",
+                            "set_value",
+                            {"entity_id": self.entities.additional_battery_power, "value": byd_power_w},
+                        )
+                        self._persist["last_set_byd_power_w"] = byd_power_w
+                        self._persist["last_set_byd_power_ts"] = now.timestamp()
+                        self._power_set_failed = False
+                    except Exception as err:  # noqa: BLE001
+                        if not self._power_set_failed:
+                            self._power_set_failed = True
+                            _LOGGER.error(
+                                "SmartFlow BYD: Leistung %d W konnte nicht gesetzt werden: %s",
+                                byd_power_w, err,
+                            )
             self.night_active = True
 
         self._persist_night_plan(
@@ -292,7 +303,7 @@ class BydNightChargeManager:
             self.night_active = False
 
             if z_charge >= 0.2:
-                byd_already_charging = current_mode in (self._charge_mode, "Nachtladen")
+                byd_already_charging = current_mode == self._charge_mode
                 if not byd_already_charging and current_mode != self._pause_mode:
                     _LOGGER.info(
                         "SmartFlow Nachtladen: Zendure lädt noch (%.2f kWh) → BYD pausieren", z_charge,
@@ -302,7 +313,7 @@ class BydNightChargeManager:
                 return "discharge_paused", None
 
             if not bridge_covered:
-                byd_already_charging = current_mode in (self._charge_mode, "Nachtladen")
+                byd_already_charging = current_mode == self._charge_mode
                 if not byd_already_charging and current_mode != self._pause_mode:
                     _LOGGER.info(
                         "SmartFlow Nachtladen: Brücke nicht gesichert (Assessment) → %s", self._pause_mode,

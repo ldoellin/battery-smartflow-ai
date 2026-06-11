@@ -1,5 +1,8 @@
 {
   "config": {
+    "abort": {
+      "already_configured": "Device is already configured"
+    },
     "step": {
       "user": {
         "title": "Set up Battery SmartFlow AI",
@@ -318,27 +321,11 @@
           "bridge_reserve_block": "Discharge paused (bridge reserve protection)"
         }
       },
-      "next_planned_action": {
-        "name": "Next planned action",
-        "state": {
-          "none": "No action planned",
-          "charge": "Planned charging",
-          "discharge": "Planned discharge",
-          "wait": "Waiting",
-          "emergency": "Emergency charge"
-        }
-      },
       "next_action_time": { "name": "Next action start time" },
-      "ai_debug": { "name": "AI debug" },
       "house_load": { "name": "House load" },
       "price_now": { "name": "Current electricity price" },
       "avg_charge_price": { "name": "Average battery charge price" },
       "profit_eur": { "name": "Savings / profit (total)" },
-      "profit_today_eur": { "name": "Profit today" },
-      "night_break_even_price": { "name": "Night break-even price" },
-      "night_assessment_projected_at_5": { "name": "Night energy at 05:00" },
-      "night_assessment_battery_at_18": { "name": "Night energy at 18:00" },
-      "night_assessment_charge_needed_kwh": { "name": "Night charge needed" },
       "night_charge_status": {
         "name": "Night charge status",
         "state": {
@@ -354,7 +341,25 @@
       "night_charge_byd_kwh": { "name": "Night charge BYD energy" },
       "night_charge_zendure_target_soc": { "name": "Night charge Zendure target SoC" },
       "night_charge_zendure_kwh": { "name": "Night charge Zendure energy" },
-      "total_available_kwh": { "name": "Total available energy" }
+      "total_available_kwh": { "name": "Total available energy" },
+      "next_action_state": {
+        "name": "Next action",
+        "state": {
+          "none": "No action",
+          "planned_charge": "Charge planned",
+          "planned_discharge": "Discharge planned",
+          "charging_active": "Charging active",
+          "discharging_active": "Discharging active",
+          "manual_charge": "Manual charge",
+          "manual_discharge": "Manual discharge",
+          "emergency_charge": "Emergency charge"
+        }
+      },
+      "profit_today_eur": { "name": "Today's savings" },
+      "night_break_even_price": { "name": "Night charge break-even price" },
+      "night_assessment_projected_at_5": { "name": "Night assessment: PV at 5am" },
+      "night_assessment_battery_at_18": { "name": "Night assessment: battery at 18:00" },
+      "night_assessment_charge_needed_kwh": { "name": "Night assessment: charge needed" }
     }
   }
 }
