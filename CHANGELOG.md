@@ -1,6 +1,6 @@
 # Changelog — Battery SmartFlow AI
 
-## v4.3.3 (2026-06-11)
+## v4.4.0 (2026-06-11)
 
 ### Stabilität — P1-Fixes aus Code Review (REVIEW_REPORT.md)
 
