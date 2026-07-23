@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from custom_components.battery_smartflow_ai.decision_engine import (
     DecisionContext,
+    DecisionEngine,
     NightWindowController,
     NightEnergyAssessment,
 )
@@ -107,6 +108,47 @@ class TestAssess:
         # battery_usable ≈ 0.115 kWh < bridge_kwh 1.5 → charge = 1.5 - 0.115
         expected = max(0.0, ctx.bridge_kwh - (ctx.soc - ctx.soc_min) / 100.0 * ctx.battery_capacity_kwh)
         assert pytest.approx(a.charge_needed_kwh, abs=0.01) == expected
+
+    def test_bridge_already_covered_now_pauses_instead_of_charging(self):
+        """Regression (v4.4.4-custom): battery_usable >= bridge_kwh, aber
+        projected_at_5 < bridge_kwh wegen pessimistischem nighttime_kwh-Abzug.
+        Entladeschutz genügt hier — es darf NICHT geladen werden, obwohl die
+        Brücke laut Projektion nicht gedeckt scheint."""
+        # pv_forecast_kwh=-1.0: Tagesziel-Prüfung (Punkt 3) deaktiviert, damit dieser
+        # Test ausschließlich den Brücke-Zweig isoliert prüft.
+        ctx = _ctx(soc=90.0, nighttime_kwh=4.0, bridge_kwh=1.5, evening_consumption_w=500.0,
+                   pv_forecast_kwh=-1.0)
+        # z_usable = (90-10)/100*5.76 = 4.608 kWh >= bridge_kwh 1.5
+        # projected_at_5 = 4.608 - 4.0 = 0.608 kWh < bridge_kwh 1.5 -> bridge_covered False
+        a = self.ctrl.assess(ctx)
+        assert a.bridge_covered is False
+        assert a.charge_needed_kwh == 0.0
+        assert a.z_charge_kwh == 0.0
+
+    def test_bridge_charge_needed_uses_battery_usable_not_projection(self):
+        """battery_usable < bridge_kwh -> charge_needed = bridge_kwh - battery_usable
+        (ARCHITECTURE.md Zeile 118), nicht bridge_kwh - projected_at_5. Der erwartete
+        Nachtverbrauch fällt durch den Entladeschutz während des Ladens (ac_mode=input)
+        ohnehin nicht an."""
+        ctx = _ctx(soc=15.0, nighttime_kwh=0.2, bridge_kwh=1.5, pv_forecast_kwh=-1.0)
+        # z_usable = (15-10)/100*5.76 = 0.288 kWh < bridge_kwh 1.5
+        # projected_at_5 = 0.288 - 0.2 = 0.088 kWh
+        a = self.ctrl.assess(ctx)
+        assert a.bridge_covered is False
+        assert pytest.approx(a.charge_needed_kwh, abs=1e-6) == ctx.bridge_kwh - 0.288
+
+    def test_bridge_protection_reason_distinguishes_from_generic_pause(self):
+        """DecisionEngine.evaluate() muss für den Entladeschutz-Fall den eigenen
+        reason 'night_bridge_discharge_protection' liefern, nicht das generische
+        'night_charge_pause' (das für 'z_charge < 0.2 kWh trotz echtem Bedarf' steht)."""
+        engine = DecisionEngine(self.ctrl)
+        ctx = _ctx(soc=90.0, nighttime_kwh=4.0, bridge_kwh=1.5, pv_forecast_kwh=-1.0)
+
+        result = self.ctrl.evaluate(engine, ctx)
+
+        assert result is not None
+        assert result.action == "idle"
+        assert result.reason == "night_bridge_discharge_protection"
 
     # --- Abend ---
 
