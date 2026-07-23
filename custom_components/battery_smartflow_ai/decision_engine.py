@@ -469,9 +469,20 @@ class NightWindowController:
             evening_covered = False
 
         if not bridge_covered:
-            # Korrekter Ladebedarf: Ziel am 05:00 ist bridge_kwh kWh → projected_at_5 muss stimmen.
-            # Nighttime-Verbrauch muss eingerechnet werden, nicht nur der aktuelle Stand.
-            charge_needed = max(0.0, ctx.bridge_kwh - projected_at_5)
+            if battery_usable >= ctx.bridge_kwh:
+                # Entladeschutz genügt: der aktuelle Stand deckt die Brücke bereits.
+                # projected_at_5 unterschreitet bridge_kwh nur, weil die Formel den
+                # erwarteten Nachtverbrauch pessimistisch abzieht — der aber gar nicht
+                # anfällt, solange Zendure/BYD nicht entladen (ac_mode=input hält den
+                # Stand). Laden wäre hier unnötig; reines Pausieren reicht (Regression,
+                # vor einigen Wochen versehentlich entfernt).
+                charge_needed = 0.0
+            else:
+                # battery_usable < bridge_kwh: echter Ladebedarf. Ziel ist, den
+                # aktuellen Stand auf bridge_kwh anzuheben — nicht projected_at_5,
+                # denn der erwartete Nachtverbrauch fällt durch den Entladeschutz
+                # (ac_mode=input während des Ladens) ohnehin nicht an.
+                charge_needed = max(0.0, ctx.bridge_kwh - battery_usable)
         elif not evening_covered:
             charge_needed = max(0.0, evening_need - battery_at_18)
         else:
@@ -635,6 +646,16 @@ class NightWindowController:
                     layer="constraints",
                 )
             self._z_charging_active = False
+            if not a.bridge_covered and a.charge_needed_kwh == 0.0:
+                # battery_usable >= bridge_kwh (s. assess()): kein Ladebedarf, nur
+                # Entladeschutz nötig — eigener reason zur Unterscheidung von
+                # "z_charge < 0.2 kWh trotz echtem Bedarf" im Rule-Trace-Log.
+                return DecisionResult(
+                    action="idle", ac_mode="input",
+                    charge_w=0.0, discharge_w=0.0,
+                    reason="night_bridge_discharge_protection",
+                    layer="constraints",
+                )
             return DecisionResult(
                 action="idle", ac_mode="input",
                 charge_w=0.0, discharge_w=0.0,
