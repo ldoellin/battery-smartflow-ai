@@ -66,6 +66,7 @@ def _ctx(**overrides) -> DecisionContext:
         additional_battery_capacity_kwh=0.0,
         bridge_kwh=1.5,              # nighttime_consumption_w 500 W × 3h
         nighttime_kwh=1.0,           # verbleibende Nacht ~2h × 500 W
+        daily_consumption_kwh=0.0,   # neutral: Tagesziel testen eigene Tests unten
         pv_self_consumption_kwh=5.0,
         pv_optimism_factor=1.0,      # neutrale Tests: kein Optimismus
         evening_consumption_w=500.0,
@@ -215,6 +216,34 @@ class TestAssess:
         assert a.charge_needed_kwh == 0.0
         assert a.bridge_covered is True
         assert a.evening_covered is True
+
+    def test_day_target_covered_when_pv_covers_daily_consumption(self):
+        """Gute PV-Prognose deckt Tagesverbrauch → day_target ≈ bridge_kwh, kein Zusatzbedarf."""
+        ctx = _ctx(
+            soc=60.0, nighttime_kwh=0.5,
+            pv_forecast_kwh=20.0, pv_self_consumption_kwh=5.0,
+            daily_consumption_kwh=12.0,
+        )
+        a = self.ctrl.assess(ctx)
+        assert a.day_target_covered is True
+
+    def test_day_target_not_covered_forces_extra_charge(self):
+        """Schwache PV-Prognose deckt Tagesverbrauch nicht → Tagesziel erzwingt mehr Ladebedarf
+        als Brücke/Abend allein (Punkt 3, PLAN_MODUL3_IMPROVEMENTS.md)."""
+        ctx_poor_pv = _ctx(
+            soc=60.0, nighttime_kwh=0.5,
+            pv_forecast_kwh=2.0, pv_self_consumption_kwh=5.0,
+            daily_consumption_kwh=12.0,
+        )
+        ctx_good_pv = _ctx(
+            soc=60.0, nighttime_kwh=0.5,
+            pv_forecast_kwh=20.0, pv_self_consumption_kwh=5.0,
+            daily_consumption_kwh=12.0,
+        )
+        a_poor = self.ctrl.assess(ctx_poor_pv)
+        a_good = self.ctrl.assess(ctx_good_pv)
+        assert a_poor.day_target_covered is False
+        assert a_poor.charge_needed_kwh > a_good.charge_needed_kwh
 
 
 # ==================================================
