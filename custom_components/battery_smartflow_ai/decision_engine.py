@@ -119,6 +119,32 @@ class NightEnergyAssessment:
     projected_at_5: float = 0.0
     battery_at_18: float = 0.0
     evening_need: float = 0.0
+    day_target_covered: bool = True   # PV-bewusstes Tagesziel inkl. Peak-Fenster ab 15 Uhr erreicht
+
+
+def _pv_aware_day_target_kwh(ctx: "DecisionContext", total_max_kwh: float) -> Optional[float]:
+    """PV-bewusstes Energieziel für den gesamten Tag (Bridge + Peak-Fenster ab 15 Uhr).
+
+    Gemeinsame Formel für NightWindowController.assess() (lädt im GO-Fenster
+    dorthin, damit PlanningRule tagsüber nicht teurer nachladen muss) und
+    DecisionEngine._calc_pv_aware_zendure_target_soc (PlanningRule-Zielwert) —
+    eine Quelle der Wahrheit statt zwei Implementierungen.
+
+        target_total = min(total_max_kwh; bridge_kwh + nighttime_kwh
+                            + max(0; daily_consumption_kwh - pv_for_battery))
+
+    Reicht die PV-Prognose für den Tagesverbrauch, ist target_total ≈ bridge_kwh
+    (kein zusätzlicher Effekt). Nur bei PV-Defizit verlangt es mehr Nachtladung.
+
+    Gibt None zurück wenn PV-Feature deaktiviert ist (pv_forecast_kwh < 0).
+    """
+    if ctx.pv_forecast_kwh < 0:
+        return None
+    pv_for_battery = max(0.0, ctx.pv_forecast_kwh - ctx.pv_self_consumption_kwh)
+    return min(
+        total_max_kwh,
+        ctx.bridge_kwh + ctx.nighttime_kwh + max(0.0, ctx.daily_consumption_kwh - pv_for_battery),
+    )
 
 
 # ==================================================
@@ -451,11 +477,22 @@ class NightWindowController:
         else:
             charge_needed = 0.0
 
+        # Punkt 3 (PLAN_MODUL3_IMPROVEMENTS.md): Tagesziel inkl. Peak-Fenster ab 15 Uhr,
+        # dieselbe PV-bewusste Formel wie DecisionEngine._calc_pv_aware_zendure_target_soc
+        # (PlanningRule). Verhindert, dass PlanningRule nach 5 Uhr zum teureren Tagespreis
+        # nachladen muss, wenn die PV-Prognose den Tagesverbrauch nicht deckt. Bei
+        # ausreichender PV-Prognose ≈ bridge_kwh (kein Effekt auf bestehendes Verhalten).
+        day_target_kwh = _pv_aware_day_target_kwh(ctx, total_capacity)
+        day_target_covered = day_target_kwh is None or battery_usable >= day_target_kwh
+        if day_target_kwh is not None and not day_target_covered:
+            charge_needed = max(charge_needed, day_target_kwh - battery_usable)
+
         z_charge = min(max(0.0, z_capacity - z_usable), charge_needed)
 
         return NightEnergyAssessment(
             bridge_covered=bridge_covered,
             evening_covered=evening_covered,
+            day_target_covered=day_target_covered,
             charge_needed_kwh=charge_needed,
             z_charge_kwh=z_charge,
             projected_at_5=projected_at_5,
@@ -568,8 +605,8 @@ class NightWindowController:
                 layer="constraints",
             )
 
-        # 2. Energie-Physik: Brücke oder Abend nicht gedeckt → Laden erforderlich
-        needs_charge = not a.bridge_covered or not a.evening_covered
+        # 2. Energie-Physik: Brücke, Abend oder Tagesziel (Peak ab 15 Uhr) nicht gedeckt
+        needs_charge = not a.bridge_covered or not a.evening_covered or not a.day_target_covered
         if needs_charge:
             # Lade-Guard: BYD entlädt gerade → kein Energiekreislauf (Charge-Constraint)
             if engine._byd_blocks_charge(ctx):
@@ -605,7 +642,7 @@ class NightWindowController:
                 layer="constraints",
             )
 
-        self._z_charging_active = False  # Brücke + Abend gedeckt → Laden abgeschlossen
+        self._z_charging_active = False  # Brücke + Abend + Tagesziel gedeckt → Laden abgeschlossen
         return None  # kein Energie-Constraint aktiv → System-Guards prüfen
 
     def _apply_system_guards(
@@ -859,13 +896,12 @@ class DecisionEngine:
             z_charge    = min(z_capacity - z_usable; charge_needed)
             z_target_soc = min(soc_max; soc + z_charge / battery_capacity_kwh × 100)
 
-        Hinweis: Verwendet den vollen Tages-/Nachthorizont (inkl. nighttime_kwh) für
-        die Tagesplanung (adaptive_planning). NightChargeRule verwendet projected_at_5
-        und battery_at_18 statt dieses SoC-Zielwerts.
+        Hinweis: target_total kommt aus der gemeinsamen Formel _pv_aware_day_target_kwh
+        (Punkt 3, PLAN_MODUL3_IMPROVEMENTS.md) — seit v4.4.2 zieht auch
+        NightWindowController.assess() denselben Wert heran (als day_target_covered),
+        damit das GO-Fenster (0–5 Uhr) das Peak-Fenster ab 15 Uhr vorlädt, statt dass
+        PlanningRule hier tagsüber teurer nachladen muss.
         """
-        if ctx.pv_forecast_kwh < 0:
-            return None  # Feature deaktiviert oder Sensor unavailable
-
         z_usable = max(0.0, (ctx.soc - ctx.soc_min) / 100.0 * ctx.battery_capacity_kwh)
 
         byd_usable = 0.0
@@ -877,11 +913,9 @@ class DecisionEngine:
         z_capacity = ctx.battery_capacity_kwh * (ctx.soc_max - ctx.soc_min) / 100.0
         total_max = z_capacity + ctx.additional_battery_capacity_kwh
 
-        _pv_for_battery = max(0.0, ctx.pv_forecast_kwh - ctx.pv_self_consumption_kwh)
-        target_total = min(
-            total_max,
-            ctx.bridge_kwh + ctx.nighttime_kwh + max(0.0, ctx.daily_consumption_kwh - _pv_for_battery),
-        )
+        target_total = _pv_aware_day_target_kwh(ctx, total_max)
+        if target_total is None:
+            return None  # Feature deaktiviert oder Sensor unavailable
 
         charge_needed = max(0.0, target_total - total_avail)
         z_charge = min(max(0.0, z_capacity - z_usable), charge_needed)

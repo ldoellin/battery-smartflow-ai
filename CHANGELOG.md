@@ -1,5 +1,31 @@
 # Changelog — Battery SmartFlow AI
 
+## v4.4.2-custom (2026-07-21)
+
+### Feature — Nachtladung deckt Peak-Fenster ab 15 Uhr vor (Punkt 3, PLAN_MODUL3_IMPROVEMENTS.md)
+
+**Problem:** `NightWindowController` lud im GO-Fenster (0–5 Uhr) bisher nur bis
+`bridge_kwh` (Brücke 05–08) + `evening_need` (18–24 Uhr). Reichte die
+PV-Prognose nicht für den restlichen Tag inkl. Preis-Peak (15–20 Uhr), musste
+`PlanningRule` danach zu einem teureren Tagespreis nachladen (beobachtet:
+Nachladung im 5–7-Uhr-Fenster zu 0,224 €/kWh statt im 0,104-€/kWh-GO-Fenster).
+
+**Fix:** Neue Modulfunktion `_pv_aware_day_target_kwh` (dieselbe Formel wie
+`DecisionEngine._calc_pv_aware_zendure_target_soc`, jetzt aus beiden Stellen
+aufgerufen statt dupliziert). `NightWindowController.assess()` prüft zusätzlich
+das PV-bewusste Tagesziel (`day_target_covered`, neues Feld in
+`NightEnergyAssessment`) und lädt im GO-Fenster nach, falls die PV-Prognose den
+Tagesverbrauch nicht deckt. Bei ausreichender PV-Prognose ≈ `bridge_kwh` →
+kein Effekt auf bestehendes Verhalten.
+
+`_apply_constraints()`: `needs_charge` berücksichtigt jetzt zusätzlich
+`day_target_covered`.
+
+Kein neuer Schalter — hängt am bestehenden PV-Forecast-Feature
+(`pv_forecast_kwh < 0` → deaktiviert wie zuvor).
+
+---
+
 ## v4.4.1-custom (2026-06-26)
 
 ### Bugfix
