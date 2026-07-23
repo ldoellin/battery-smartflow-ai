@@ -198,7 +198,7 @@ class BydNightChargeManager:
         if not self.entities.additional_battery_mode:
             return
 
-        (byd_target_soc, z_target_soc, byd_charge, bridge_covered,
+        (byd_target_soc, z_target_soc, byd_charge, bridge_covered, day_target_covered,
          current_byd_soc, byd_actual_kwh, zendure_actual_kwh, z_charge) = self._calc_targets(ctx, assessment)
 
         current_mode = self._state(self.entities.additional_battery_mode)
@@ -206,6 +206,7 @@ class BydNightChargeManager:
         night_status, mode_to_set = self._decide_byd_mode(
             byd_charge=byd_charge,
             bridge_covered=bridge_covered,
+            day_target_covered=day_target_covered,
             current_mode=current_mode,
             byd_target_soc=byd_target_soc,
             current_byd_soc=current_byd_soc,
@@ -264,15 +265,17 @@ class BydNightChargeManager:
         self,
         ctx: DecisionContext,
         assessment: NightEnergyAssessment | None,
-    ) -> tuple[float, float, float, bool, float, float, float, float]:
+    ) -> tuple[float, float, float, bool, bool, float, float, float, float]:
         """Berechnet Lade-Ziele aus Assessment und SoC-Snapshot.
 
         Returns (byd_target_soc, z_target_soc, byd_charge, bridge_covered,
-                 current_byd_soc, byd_actual_kwh, zendure_actual_kwh, z_charge).
+                 day_target_covered, current_byd_soc, byd_actual_kwh,
+                 zendure_actual_kwh, z_charge).
         """
-        charge_needed  = assessment.charge_needed_kwh if assessment else 0.0
-        z_charge       = assessment.z_charge_kwh      if assessment else 0.0
-        bridge_covered = assessment.bridge_covered    if assessment else True
+        charge_needed      = assessment.charge_needed_kwh   if assessment else 0.0
+        z_charge           = assessment.z_charge_kwh        if assessment else 0.0
+        bridge_covered     = assessment.bridge_covered      if assessment else True
+        day_target_covered = assessment.day_target_covered  if assessment else True
         byd_charge     = max(0.0, charge_needed - z_charge)
 
         current_byd_soc = ctx.additional_battery_soc if ctx.additional_battery_soc >= 0 else 0.0
@@ -298,12 +301,13 @@ class BydNightChargeManager:
             z_target_soc = min(ctx.soc_max, ctx.soc + z_charge / ctx.battery_capacity_kwh * 100.0)
 
         return (byd_target_soc, z_target_soc, byd_charge, bridge_covered,
-                current_byd_soc, byd_actual_kwh, zendure_actual_kwh, z_charge)
+                day_target_covered, current_byd_soc, byd_actual_kwh, zendure_actual_kwh, z_charge)
 
     def _decide_byd_mode(
         self,
         byd_charge: float,
         bridge_covered: bool,
+        day_target_covered: bool,
         current_mode: str,
         byd_target_soc: float,
         current_byd_soc: float,
@@ -328,11 +332,13 @@ class BydNightChargeManager:
                     return "discharge_paused", self._pause_mode
                 return "discharge_paused", None
 
-            if not bridge_covered:
+            if not bridge_covered or not day_target_covered:
                 byd_already_charging = current_mode == self._charge_mode
                 if not byd_already_charging and current_mode != self._pause_mode:
                     _LOGGER.info(
-                        "SmartFlow Nachtladen: Brücke nicht gesichert (Assessment) → %s", self._pause_mode,
+                        "SmartFlow Nachtladen: %s (Assessment) → %s",
+                        "Brücke nicht gesichert" if not bridge_covered else "Tagesziel (Peak ab 15 Uhr) nicht gesichert",
+                        self._pause_mode,
                     )
                     self.discharge_paused = True
                     return "discharge_paused", self._pause_mode

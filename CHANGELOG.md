@@ -1,5 +1,26 @@
 # Changelog — Battery SmartFlow AI
 
+## v4.4.3-custom (2026-07-22)
+
+### Bugfix — BYD ignorierte das neue Tagesziel (Anschluss an v4.4.2-custom)
+
+**Problem:** `BydNightChargeManager._decide_byd_mode()` pausierte BYD nur bei
+`bridge_covered=False`, nicht bei `day_target_covered=False` (dem in v4.4.2-custom
+eingeführten, umfassenderen Tagesziel inkl. Peak-Fenster ab 15 Uhr). Beobachtet in
+der Nacht 21.→22.07.: Zendure lud korrekt gegen das eingebrochene PV-Forecast nach,
+BYD blieb aber auf `bridge_covered=True` hängen (Brücke allein war gedeckt) und lief
+auf eigener Automatik weiter, statt zu pausieren.
+
+**Fix:** `_calc_targets()` gibt jetzt zusätzlich `day_target_covered` zurück,
+`_decide_byd_mode()` bekommt es als Parameter und pausiert BYD bei
+`not bridge_covered or not day_target_covered`. **Files:** `byd_manager.py`.
+
+Zendure-Priorität vor BYD (`z_charge = min(gap, need)`, `byd = max(0, need - z_charge)`,
+BUG-004) und Brücken-Schutz auch im manuellen Modus (BUG-013) waren bereits korrekt
+implementiert — kein Fix nötig, siehe DEBUG_NOTES.md.
+
+---
+
 ## v4.4.2-custom (2026-07-21)
 
 ### Feature — Nachtladung deckt Peak-Fenster ab 15 Uhr vor (Punkt 3, PLAN_MODUL3_IMPROVEMENTS.md)
