@@ -1,5 +1,28 @@
 # Changelog — Battery SmartFlow AI
 
+## v4.4.5-custom (2026-07-23)
+
+### Fix — Konfiguriertes Peak-Schutzfenster (15-20 Uhr) wurde bei vorhandenen Preisdaten ignoriert
+
+**Problem:** `grid_protect_active`/`top_hours` (Netzbezugsschutz-Rationierung, Modul 3)
+wurden bei vorhandenen Preisdaten ausschließlich aus `very_expensive_threshold`
+abgeleitet — das über `SETTING_PEAK_PROTECT_START`/`SETTING_PEAK_PROTECT_END`
+konfigurierte Zeitfenster (Default 15-20 Uhr) galt nur als Fallback **ohne**
+Preisdaten und wurde komplett ignoriert, sobald eine Preisreihe vorlag. Unterschreitet
+der Preis innerhalb von 15-20 Uhr kurz die `very_expensive`-Schwelle (z.B. ein
+Preis-Einbruch mitten im teuren Fenster), wurde diese Stunde nicht mitgezählt —
+der Akku hätte in genau dieser Stunde ungeschützt sein können.
+
+**Fix:** Das konfigurierte Fenster gilt jetzt zusätzlich als Mindest-Garantie:
+`top_hours = max(preisgetriebene_top_hours, restliche_stunden_im_konfigurierten_fenster)`.
+Die preisgetriebene Erkennung kann den Schutz weiterhin über 20 Uhr hinaus
+verlängern, falls die Preise dort noch teuer sind — das Fenster hebt den Schutz
+nur an, nie ab. **Files:** `coordinator.py`.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+
+---
+
 ## v4.4.4-custom (2026-07-23)
 
 ### Bugfix — Entladeschutz-Fall in `NightWindowController.assess()` fehlte (Regression)

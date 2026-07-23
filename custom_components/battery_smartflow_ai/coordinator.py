@@ -1224,6 +1224,14 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     reserve_kwh += _expected_load_w(p.start.hour) / 1000.0 * slot_h
                 if in_top_now and p.price >= very_expensive:
                     top_hours += slot_h
+
+            # Konfiguriertes Zeitfenster (Default 15-20) gilt als Mindest-Garantie
+            # zusätzlich zur preisgetriebenen Erkennung: schützt auch dann, wenn
+            # very_expensive innerhalb des Fensters kurz unterschritten wird und
+            # die Preis-Schleife einzelne Stunden dadurch nicht mitzählt.
+            if protect_start != protect_end and protect_start <= now.hour < protect_end:
+                top_hours = max(top_hours, float(protect_end) - now_h)
+
             grid_protect_active = top_hours > 0.0
 
             if e_avail > reserve_kwh:
