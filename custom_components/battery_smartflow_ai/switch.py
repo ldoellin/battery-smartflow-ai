@@ -73,6 +73,7 @@ class PvNightChargeSwitch(SwitchEntity):
             self._entry,
             options={**self._entry.options, SETTING_PV_FORECAST_ENABLED: 0.0},
         )
+        await self.coordinator.async_reset_byd_night_charge()
         self.async_write_ha_state()
 
     async def async_added_to_hass(self) -> None:

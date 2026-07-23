@@ -619,16 +619,11 @@ class ZendureSmartFlowOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             merged_options = dict(self.config_entry.options)
 
-            installed_pv_wp = user_input.get(
-                CONF_INSTALLED_PV_WP,
-                self.config_entry.options.get(
-                    CONF_INSTALLED_PV_WP,
-                    self.config_entry.data.get(
-                        CONF_INSTALLED_PV_WP,
-                        DEFAULT_INSTALLED_PV_WP,
-                    ),
-                ),
-            )
+            # installed_pv_wp wird ausschließlich über den Reconfigure-Dialog in
+            # entry.data gepflegt und ist hier nicht im Formular. Nicht nach
+            # options schreiben — sonst verdeckt ein stehengebliebener Wert die
+            # data-Konfiguration. Einen evtl. alten options-Eintrag entfernen.
+            merged_options.pop(CONF_INSTALLED_PV_WP, None)
 
             profile_overrides: dict[str, float] = {}
             for key in PROFILE_OVERRIDE_FIELDS:
@@ -640,7 +635,6 @@ class ZendureSmartFlowOptionsFlow(config_entries.OptionsFlow):
                 except (TypeError, ValueError):
                     continue
 
-            merged_options[CONF_INSTALLED_PV_WP] = float(installed_pv_wp)
             merged_options[CONF_PROFILE_OVERRIDES] = profile_overrides
 
             return self.async_create_entry(

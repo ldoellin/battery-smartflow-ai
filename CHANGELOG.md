@@ -1,5 +1,18 @@
 # Changelog — Battery SmartFlow AI
 
+## v4.4.1-custom (2026-06-26)
+
+### Bugfix
+
+**30W Deadband für `_byd_blocks_discharge` (decision_engine.py)**
+`_byd_blocks_discharge` blockierte Zendure-Entladung bei jedem BYD-Ladewert > 0 W —
+also auch bei Messrauschen und Restwerten direkt nach dem Pausieren der BYD.
+Schwellwert analog zu `_byd_blocks_charge` (120 W) auf 30 W angehoben.
+Praktische Auswirkung: Manual constant_discharge startet jetzt sofort nach dem
+BYD-Pause-Befehl, ohne auf das vollständige Abklingen der Leistung warten zu müssen.
+
+---
+
 ## v4.4.0 (2026-06-11)
 
 ### Stabilität — P1-Fixes aus Code Review (REVIEW_REPORT.md)

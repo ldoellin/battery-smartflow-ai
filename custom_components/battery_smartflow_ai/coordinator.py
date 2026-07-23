@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import statistics
 from dataclasses import dataclass
 from datetime import datetime, timedelta, time as dtime
 from typing import Any
@@ -71,6 +72,8 @@ from .const import (
     SETTING_PROFIT_MARGIN_PCT,
     SETTING_BATTERY_PACKS,
     SETTING_PEAK_FACTOR,
+    SETTING_PEAK_PROTECT_START,
+    SETTING_PEAK_PROTECT_END,
     SETTING_VALLEY_FACTOR,
     SETTING_VERY_CHEAP_PRICE,
     # defaults
@@ -85,6 +88,8 @@ from .const import (
     DEFAULT_PROFIT_MARGIN_PCT,
     DEFAULT_BATTERY_PACKS,
     DEFAULT_PEAK_FACTOR,
+    DEFAULT_PEAK_PROTECT_START,
+    DEFAULT_PEAK_PROTECT_END,
     DEFAULT_VALLEY_FACTOR,
     # modes
     AI_MODE_AUTOMATIC,
@@ -261,6 +266,9 @@ class _CycleState:
     soc_limit: int | None
     evening_consumption_w: float = 500.0
     discharge_blocked_by_soc_min: bool = False
+    grid_protect_active: bool = False
+    cover_cap_w: float = 0.0
+    cover_breakeven: float | None = None
 
 
 class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -442,6 +450,16 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         darf ai_mode/manual_action/season_override nicht verlieren."""
         await self._save()
 
+    async def async_reset_byd_night_charge(self) -> None:
+        """Erzwingt BYD-Sicherheitsstopp (z.B. bei Deaktivierung der PV-Nachtladung).
+
+        Ohne diesen Reset bleibt der BYD-Modus bis 05:00 oder erneutem
+        Einschalten auf "Laden", da _byd.update() nur bei aktivem
+        Feature (pv_forecast_enabled) im Zyklus aufgerufen wird.
+        """
+        await self._byd.async_reset()
+        await self._save()
+
     async def async_shutdown(self) -> None:
         await super().async_shutdown()
         await self._save()
@@ -468,10 +486,12 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _get_installed_pv_wp(self) -> float:
         try:
-            value = self.entry.options.get(
-                CONF_INSTALLED_PV_WP,
-                self.entry.data.get(CONF_INSTALLED_PV_WP, DEFAULT_INSTALLED_PV_WP),
-            )
+            # installed_pv_wp wird über den Reconfigure-Dialog in entry.data
+            # gepflegt. Ein veralteter/0.0-Wert in entry.options darf das nicht
+            # verdecken → options nur nutzen, wenn er aussagekräftig (> 0) ist.
+            value = self.entry.options.get(CONF_INSTALLED_PV_WP)
+            if not value:
+                value = self.entry.data.get(CONF_INSTALLED_PV_WP, DEFAULT_INSTALLED_PV_WP)
             return float(value)
         except Exception:
             return float(DEFAULT_INSTALLED_PV_WP)
@@ -587,6 +607,17 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             p = _to_float(self._state(self.entities.price_now), None)
             if p is not None:
                 return float(p)
+        return None
+
+    def _price_now_from_points(self, price_points: list, now: datetime) -> float | None:
+        """Aktueller Preis aus dem laufenden Slot der Preisreihe (P1.1).
+
+        Eine Quelle, konsistente Einheit (€/kWh, bereits normalisiert). Gibt None
+        zurück, wenn kein Slot now enthält → Aufrufer nutzt den price_now-Sensor.
+        """
+        for p in price_points:
+            if p.start <= now < p.end:
+                return float(p.price)
         return None
 
     def _get_soc_limit(self) -> int | None:
@@ -784,8 +815,9 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if t_end <= t_start:
                     continue
 
-                if t_end <= now:
-                    continue
+                # Vergangene Slots bewusst NICHT verwerfen: die volle Tagesreihe
+                # ist die stabile Basis für die Schwellen-Ableitung (P1.2). Die
+                # zukunftsbasierte Slot-Auswahl filtert der Aufrufer/Engine selbst.
 
                 price = float(cents) / 100.0  # cents -> €
                 out.append(PricePoint(start=t_start, end=t_end, price=price))
@@ -831,13 +863,51 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if t_end <= t_start:
                 continue
 
-            if t_end <= now:
-                continue
+            # Vergangene Slots bewusst behalten (volle Tagesreihe, P1.2).
 
             out.append(PricePoint(start=t_start, end=t_end, price=float(p)))
 
         out.sort(key=lambda x: x.start)
+
+        # Einheiten-Normalisierung: Manche Quellen (z. B. Octopus SmartFlow
+        # price_series) liefern ct/kWh in einem generischen data[]-Array, Tibber
+        # dagegen €/kWh. Per Median-Magnitude erkennen und auf €/kWh
+        # vereinheitlichen — >3 €/kWh ist physikalisch unmöglich → Werte sind ct.
+        # (unit_rate_forecast/timeslots wurden oben bereits durch /100 normalisiert.)
+        if out:
+            median_price = statistics.median(p.price for p in out)
+            if median_price > 3.0:
+                out = [
+                    PricePoint(start=p.start, end=p.end, price=p.price / 100.0)
+                    for p in out
+                ]
+
         return out
+
+    def _derive_price_thresholds(self, price_points: list) -> dict | None:
+        """Leitet Preis-Schwellen aus der Tagespreis-Reihe ab (EnWG 14a Modul 3).
+
+        Statt fixer Defaults werden very_cheap / expensive / very_expensive als
+        Perzentile der Stundenpreise (sensor.octopus_smartflow_price_series)
+        bestimmt. Die Preisstufen sind für 2026 fix, daher ist die Reihe stabil.
+
+        Returns None wenn zu wenige Preisdaten vorliegen (< 2 Slots).
+        """
+        prices = sorted(p.price for p in price_points)
+        if len(prices) < 2:
+            return None
+
+        def _pct(q: float) -> float:
+            idx = q * (len(prices) - 1)
+            lo = int(idx)
+            hi = min(lo + 1, len(prices) - 1)
+            return prices[lo] + (prices[hi] - prices[lo]) * (idx - lo)
+
+        return {
+            "very_cheap": round(_pct(0.25), 4),       # günstigste Tarifstufe → laden
+            "expensive": round(_pct(0.75), 4),        # oberes Quartil → entladen erwägen
+            "very_expensive": round(_pct(0.95), 4),   # Peak-Stufe → Force-Discharge
+        }
 
     def _season_detection(self, pv_w: float, export_w: float, now: datetime) -> str:
         """
@@ -921,7 +991,7 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if action == "charge":
             return AI_STATUS_CHARGE_SURPLUS
         if action == "discharge":
-            if "very_expensive" in reason or "adaptive_peak" in reason:
+            if "very_expensive" in reason or "adaptive_peak" in reason or "grid_protect" in reason:
                 return AI_STATUS_VERY_EXPENSIVE_FORCE
             if "price" in reason:
                 return AI_STATUS_EXPENSIVE_DISCHARGE
@@ -990,6 +1060,11 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         max_charge    = min(float(max_charge),    profile_max_in)
         max_discharge = min(float(max_discharge), profile_max_out)
 
+        # Teures Fenster wird preis-getrieben aus der Reihe bestimmt (Budget
+        # weiter unten). Zeitfenster nur als Fallback ohne Preisdaten.
+        protect_start = int(self.runtime_settings.get(SETTING_PEAK_PROTECT_START, DEFAULT_PEAK_PROTECT_START))
+        protect_end   = int(self.runtime_settings.get(SETTING_PEAK_PROTECT_END,   DEFAULT_PEAK_PROTECT_END))
+
         expensive         = self._get_setting(SETTING_PRICE_THRESHOLD,          DEFAULT_PRICE_THRESHOLD)
         very_expensive    = self._get_setting(SETTING_VERY_EXPENSIVE_THRESHOLD, DEFAULT_VERY_EXPENSIVE_THRESHOLD)
         emergency_soc     = self._get_setting(SETTING_EMERGENCY_SOC,            DEFAULT_EMERGENCY_SOC)
@@ -1015,13 +1090,22 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if grid_export < GRID_EPSILON:
             grid_export = 0.0
 
-        price_now = self._get_price_now()
         try:
-            price_points = self._parse_price_points(now)
+            price_points_full = self._parse_price_points(now)
             self._err_flags.discard("price_parse")
         except Exception:  # noqa: BLE001
             self._exception_once("price_parse", "Preis-Parsing fehlgeschlagen — Zyklus läuft ohne Preisdaten weiter")
-            price_points = []
+            price_points_full = []
+
+        # Engine bekommt weiterhin nur den aktuellen + zukünftige Slots
+        # (unverändertes Verhalten der Slot-Auswahl).
+        price_points = [p for p in price_points_full if p.end > now]
+
+        # P1.1: price_now bevorzugt aus dem laufenden Slot der Preisreihe
+        # (eine Quelle, konsistente Einheit €/kWh), Fallback auf den Sensor.
+        price_now = self._price_now_from_points(price_points_full, now)
+        if price_now is None:
+            price_now = self._get_price_now()
 
         byd_charge_raw    = float(_to_float(self._state(self.entities.additional_battery_charge),    0.0) or 0.0)
         byd_discharge_raw = float(_to_float(self._state(self.entities.additional_battery_discharge), 0.0) or 0.0)
@@ -1063,23 +1147,107 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         daily_consumption_kwh   = (nighttime_consumption_w / 1000.0 * 11.0
                                    + daytime_consumption_w / 1000.0 * 10.0)
 
+        # P1.2: Ø Tagespreis und Schwellen aus der VOLLEN Tagesreihe (inkl.
+        # Vergangenheit) — stabile Basis; abends kein Verzerren durch Rest-Slots.
         daily_avg_price = None
-        if price_points:
-            prices = [p.price for p in price_points]
+        if price_points_full:
+            prices = [p.price for p in price_points_full]
             if prices:
                 daily_avg_price = sum(prices) / len(prices)
+
+        # EnWG 14a Modul 3: Schwellen aus der Preisreihe ableiten statt hardcoded.
+        # Bei vorhandenen Preisdaten ersetzen die abgeleiteten Werte die
+        # Config-/Default-Fallbacks (expensive/very_expensive aus Zeile oben).
+        derived_thresholds = self._derive_price_thresholds(price_points_full)
+        if derived_thresholds is not None:
+            expensive = derived_thresholds["expensive"]
+            very_expensive = derived_thresholds["very_expensive"]
 
         peak_factor   = float(self.runtime_settings.get(SETTING_PEAK_FACTOR,   DEFAULT_PEAK_FACTOR))
         valley_factor = float(
             self.runtime_settings.get(SETTING_VALLEY_FACTOR, DEFAULT_VALLEY_FACTOR) or DEFAULT_VALLEY_FACTOR
         )
 
-        very_cheap_price = self.runtime_settings.get(SETTING_VERY_CHEAP_PRICE, None)
-        if very_cheap_price is not None:
-            try:
-                very_cheap_price = float(very_cheap_price)
-            except Exception:
+        # very_cheap_price: bevorzugt aus der Preisreihe abgeleitet (Modul 3),
+        # sonst manueller Wert aus der Number-Entity (0.0 = kein Filter → None).
+        if derived_thresholds is not None:
+            very_cheap_price = derived_thresholds["very_cheap"]
+        else:
+            very_cheap_price = self.runtime_settings.get(SETTING_VERY_CHEAP_PRICE, None)
+            if very_cheap_price is not None:
+                try:
+                    very_cheap_price = float(very_cheap_price)
+                except Exception:
+                    very_cheap_price = None
+            if very_cheap_price == 0.0:
                 very_cheap_price = None
+
+        # ------------------------------------------------------------------
+        # Eigenverbrauchs-Budget (Modul 3), PREIS-PRIORISIERT aus der Reihe:
+        # Der Akku deckt die Hauslast, reserviert aber Energie für alle künftigen
+        # Stunden, die TEURER sind als jetzt. Reicht die Energie nicht, fließt sie
+        # in die teuersten Stunden zuerst (billigere Stunden jetzt aus dem Netz).
+        # In der laufenden Top-Stufe: volle Geräteleistung, ggf. so rationiert,
+        # dass der Akku bis zum Ende der Top-Stufe trägt. Zeitfenster nur Fallback.
+        # ------------------------------------------------------------------
+        now_h = now.hour + now.minute / 60.0
+
+        def _expected_load_w(h: int) -> float:
+            if h < 8:
+                return nighttime_consumption_w   # 00–05 Nacht + 05–08 Brücke
+            if h < 18:
+                return daytime_consumption_w      # 08–18 Tag
+            return evening_consumption_w          # 18–24 Abend
+
+        e_avail = max(0.0, (soc - float(soc_min)) / 100.0 * battery_capacity_kwh)
+        rte = float(profile.get("ROUND_TRIP_EFFICIENCY", 0.90)) or 0.90
+        cover_breakeven = None
+        cover_cap_w = 0.0
+        grid_protect_active = False
+
+        if price_points_full and price_now is not None:
+            cover_breakeven = min(p.price for p in price_points_full) / rte
+            in_top_now = very_expensive is not None and price_now >= very_expensive
+
+            # Ein Durchlauf über künftige Slots, begrenzt auf den Horizont bis zum
+            # nächsten günstigen Ladefenster (price ≤ Break-Even). Dahinter lädt der
+            # Akku wieder voll → morgige teure Stunden NICHT mit reservieren.
+            reserve_kwh = 0.0   # Last künftiger Slots, die teurer sind als jetzt
+            top_hours = 0.0     # Restdauer der laufenden Top-Stufe
+            for p in sorted(price_points_full, key=lambda x: x.start):
+                if p.end <= now:
+                    continue
+                if cover_breakeven is not None and p.price <= cover_breakeven:
+                    break  # nächste günstige Lade-Gelegenheit → Horizont endet
+                slot_h = max(0.0, (p.end - max(p.start, now)).total_seconds() / 3600.0)
+                if p.start > now and p.price > price_now:
+                    reserve_kwh += _expected_load_w(p.start.hour) / 1000.0 * slot_h
+                if in_top_now and p.price >= very_expensive:
+                    top_hours += slot_h
+            grid_protect_active = top_hours > 0.0
+
+            if e_avail > reserve_kwh:
+                cover_cap_w = profile_max_out if grid_protect_active else max_discharge
+                if grid_protect_active:
+                    top_need = _expected_load_w(now.hour) / 1000.0 * top_hours
+                    if e_avail < top_need:   # reicht nicht für das ganze Top-Fenster → strecken
+                        cover_cap_w = min(cover_cap_w, e_avail * 1000.0 / top_hours)
+            else:
+                cover_cap_w = 0.0   # für die teureren Stunden aufsparen
+        else:
+            # Fallback ohne Preisdaten: festes Zeitfenster (Default 15–20).
+            grid_protect_active = protect_start != protect_end and protect_start <= now.hour < protect_end
+            if protect_start != protect_end and now_h < protect_end:
+                rem = float(protect_end - protect_start) if now_h < protect_start else float(protect_end) - now_h
+            else:
+                rem = 0.0
+            reserve_kwh = evening_consumption_w / 1000.0 * rem
+            if grid_protect_active:
+                cover_cap_w = profile_max_out
+                if rem > 0 and e_avail < reserve_kwh:
+                    cover_cap_w = min(cover_cap_w, e_avail * 1000.0 / rem)
+            else:
+                cover_cap_w = max_discharge if e_avail > reserve_kwh else 0.0
 
         current_peak_threshold   = daily_avg_price * peak_factor   if daily_avg_price is not None else None
         current_valley_threshold = daily_avg_price * valley_factor if daily_avg_price is not None else None
@@ -1157,6 +1325,9 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             season=season,
             soc_limit=soc_limit,
             evening_consumption_w=evening_consumption_w,
+            grid_protect_active=grid_protect_active,
+            cover_cap_w=cover_cap_w,
+            cover_breakeven=cover_breakeven,
         )
 
     def _build_decision_context(self, state: _CycleState) -> DecisionContext:
@@ -1212,6 +1383,9 @@ class ZendureSmartFlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             wallbox_block_enabled=bool(
                 self.runtime_settings.get(SETTING_WALLBOX_BLOCK_ENABLED, DEFAULT_WALLBOX_BLOCK_ENABLED)
             ),
+            grid_protect_active=state.grid_protect_active,
+            cover_cap_w=state.cover_cap_w,
+            cover_breakeven=state.cover_breakeven,
         )
 
     def _apply_soc_guards(self, decision: DecisionResult, state: _CycleState) -> DecisionResult:

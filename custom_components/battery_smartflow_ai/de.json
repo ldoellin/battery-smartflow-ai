@@ -1,0 +1,360 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Battery SmartFlow AI einrichten",
+        "description": "Wähle die benötigten Sensoren aus",
+        "data": {
+          "device_profile": "Geräteprofil",
+          "soc_entity": "Batterie-SoC Sensor",
+          "soc_limit_entity": "SoC-Limit Status (optional)",
+          "pack_capacity_kwh": "Kapazität pro Akku-Pack (kWh)",
+          "installed_pv_wp": "Installierte PV-Leistung (Wp, optional)",
+          "battery_ac_power_entity": "Batterie Leistungssensor (W)",
+          "pv_entity": "PV-Leistung Sensor",
+          "additional_battery_charge_entity": "Zweite Batterie Ladeleistung Sensor (optional)",
+          "additional_battery_discharge_entity": "Zweite Batterie Entladeleistung Sensor (optional)",
+          "wallbox_power_entity": "Wallbox Leistungssensor (optional)",
+          "pv_forecast_entity": "PV-Prognose Sensor (optional)",
+          "pv_daily_yield_entity": "PV Tagesertrag Sensor (optional)",
+          "additional_battery_soc_entity": "Zweite Batterie SoC Sensor (optional)",
+          "additional_battery_capacity_kwh": "Zweite Batterie Kapazität (kWh)",
+          "additional_battery_mode_entity": "Zweite Batterie Modus input_select (optional)",
+          "additional_battery_power_entity": "Zweite Batterie Leistung input_number (optional)",
+          "additional_battery_charge_mode": "Lademodus-String (z. B. 'Laden')",
+          "additional_battery_stop_mode": "Stopmodus-String (z. B. 'Automatik')",
+          "additional_battery_pause_mode": "Pausemodus-String (z. B. 'Pause')",
+          "price_export_entity": "Preisverlauf (z. B. Tibber / EPEX)",
+          "price_now_entity": "Aktueller Strompreis",
+          "ac_mode_entity": "Zendure AC-Modus",
+          "input_limit_entity": "Zendure Ladeleistung",
+          "output_limit_entity": "Zendure Entladeleistung",
+          "grid_mode": "Netzmessung",
+          "grid_power_entity": "Netzleistung (Single)",
+          "grid_import_entity": "Netzbezug (Split)",
+          "grid_export_entity": "Netzeinspeisung (Split)"
+        },
+        "data_description": {
+          "device_profile": "Wähle das passende Geräteprofil für dein Zendure-System. Die Regelparameter werden automatisch angepasst.",
+          "soc_entity": "Sensor mit dem aktuellen Ladezustand der Batterie in Prozent.",
+          "soc_limit_entity": "Optionaler Statussensor aus der Zendure-Integration zur Erkennung aktiver BMS-Sperren.",
+          "pack_capacity_kwh": "Nutzbare Kapazität eines einzelnen Akku-Packs in kWh. Wird mit der Anzahl der Packs multipliziert.",
+          "installed_pv_wp": "Installierte Spitzenleistung der PV-Anlage in Wattpeak. Wird für zukünftige Optimierungen verwendet.",
+          "battery_ac_power_entity": "Sensor für die AC-Leistung der Batterie in Watt. Muss bei Entladung positiv sein.",
+          "pv_entity": "Sensor mit der aktuellen PV-Leistung in Watt. Wird zur Erkennung von Überschuss verwendet.",
+          "additional_battery_charge_entity": "Sensor mit der aktuellen Ladeleistung der zweiten Batterie in Watt (z. B. BYD).",
+          "additional_battery_discharge_entity": "Sensor mit der aktuellen Entladeleistung der zweiten Batterie in Watt.",
+          "wallbox_power_entity": "Sensor mit der aktuellen Ladeleistung der Wallbox in Watt. Verhindert Zendure-Entladung bei aktivem Fahrzeug-Laden.",
+          "pv_forecast_entity": "Solcast- oder anderer PV-Prognosesensor (heutige Erzeugung in kWh). Basis für PV-bewusste Nachtladung.",
+          "pv_daily_yield_entity": "Sensor mit dem tatsächlichen PV-Tagesertrag (kWh). Wird bei Sonnenuntergang gespeichert und als Fallback-Prognose genutzt, wenn kein Solcast-Sensor verfügbar ist.",
+          "additional_battery_soc_entity": "Sensor mit dem Ladezustand der zweiten Batterie in Prozent (z. B. BYD HVS).",
+          "additional_battery_capacity_kwh": "Gesamtkapazität der zweiten Batterie in kWh. Wird für die Nachtlade-Berechnung benötigt. 0 = nicht vorhanden.",
+          "additional_battery_mode_entity": "input_select zur Steuerung des Betriebsmodus der zweiten Batterie (Laden / Automatik / Pause).",
+          "additional_battery_power_entity": "input_number zur Einstellung der Ladeleistung der zweiten Batterie in Watt.",
+          "additional_battery_charge_mode": "Exakter Text-Wert des Lademodus im input_select (z. B. 'Laden'). Muss exakt mit den Optionen übereinstimmen.",
+          "additional_battery_stop_mode": "Exakter Text-Wert des Normalmodus im input_select (z. B. 'Automatik'). Wird nach Abschluss der Nachtladung gesetzt.",
+          "additional_battery_pause_mode": "Exakter Text-Wert des Pause-Modus im input_select (z. B. 'Pause'). Verhindert Entladung während der Zendure-Nachtladung.",
+          "price_export_entity": "Sensor mit Preisprognosedaten für die nächsten Stunden (z. B. Tibber). Ermöglicht intelligente Ladeplanung.",
+          "price_now_entity": "Sensor mit dem aktuellen Strompreis (€/kWh). Wird für preisabhängige Entladung genutzt.",
+          "ac_mode_entity": "Select-Entität der Zendure-Integration, die zwischen Laden (INPUT) und Entladen (OUTPUT) umschaltet.",
+          "input_limit_entity": "Number-Entität zur Einstellung der Zendure-Ladeleistung in Watt.",
+          "output_limit_entity": "Number-Entität zur Einstellung der Zendure-Entladeleistung in Watt.",
+          "grid_mode": "Bestimmt, wie Netzbezug und Einspeisung erfasst werden.",
+          "grid_power_entity": "Ein kombinierter Netzsensor (positiv = Bezug, negativ = Einspeisung).",
+          "grid_import_entity": "Sensor für Netzbezug in Watt (Split-Modus).",
+          "grid_export_entity": "Sensor für Netzeinspeisung in Watt (Split-Modus)."
+        }
+      },
+      "grid": {
+        "title": "Netzmessung konfigurieren",
+        "description": "Wähle die Netzsensoren passend zum Modus",
+        "data": {
+          "grid_power_entity": "Netzleistung (Single)",
+          "grid_import_entity": "Netzbezug (Split)",
+          "grid_export_entity": "Netzeinspeisung (Split)"
+        },
+        "data_description": {
+          "grid_power_entity": "Ein einzelner Sensor mit positiver Leistung bei Bezug und negativer bei Einspeisung.",
+          "grid_import_entity": "Sensor mit aktueller Netzbezugsleistung in Watt.",
+          "grid_export_entity": "Sensor mit aktueller Netzeinspeisung in Watt."
+        }
+      },
+      "reconfigure": {
+        "title": "Battery SmartFlow AI neu konfigurieren",
+        "description": "Passe die ausgewählten Sensoren an",
+        "data": {
+          "device_profile": "Geräteprofil",
+          "soc_entity": "Batterie-SoC Sensor",
+          "soc_limit_entity": "SoC-Limit Status (optional)",
+          "pack_capacity_kwh": "Kapazität pro Akku-Pack (kWh)",
+          "installed_pv_wp": "Installierte PV-Leistung (Wp, optional)",
+          "battery_ac_power_entity": "Batterie Leistungssensor (W)",
+          "pv_entity": "PV-Leistung Sensor",
+          "additional_battery_charge_entity": "Zweite Batterie Ladeleistung Sensor (optional)",
+          "additional_battery_discharge_entity": "Zweite Batterie Entladeleistung Sensor (optional)",
+          "wallbox_power_entity": "Wallbox Leistungssensor (optional)",
+          "pv_forecast_entity": "PV-Prognose Sensor (optional)",
+          "pv_daily_yield_entity": "PV Tagesertrag Sensor (optional)",
+          "additional_battery_soc_entity": "Zweite Batterie SoC Sensor (optional)",
+          "additional_battery_capacity_kwh": "Zweite Batterie Kapazität (kWh)",
+          "additional_battery_mode_entity": "Zweite Batterie Modus input_select (optional)",
+          "additional_battery_power_entity": "Zweite Batterie Leistung input_number (optional)",
+          "additional_battery_charge_mode": "Lademodus-String (z. B. 'Laden')",
+          "additional_battery_stop_mode": "Stopmodus-String (z. B. 'Automatik')",
+          "additional_battery_pause_mode": "Pausemodus-String (z. B. 'Pause')",
+          "price_export_entity": "Preisverlauf (z. B. Tibber / EPEX)",
+          "price_now_entity": "Aktueller Strompreis",
+          "ac_mode_entity": "Zendure AC-Modus",
+          "input_limit_entity": "Zendure Ladeleistung",
+          "output_limit_entity": "Zendure Entladeleistung",
+          "grid_mode": "Netzmessung",
+          "grid_power_entity": "Netzleistung (Single)",
+          "grid_import_entity": "Netzbezug (Split)",
+          "grid_export_entity": "Netzeinspeisung (Split)"
+        },
+        "data_description": {
+          "device_profile": "Wähle das passende Geräteprofil für dein Zendure-System. Das Profil enthält abgestimmte Regelparameter.",
+          "soc_entity": "Sensor mit dem aktuellen Ladezustand (State of Charge) der Batterie in Prozent.",
+          "soc_limit_entity": "Optionaler Sensor aus der Zendure-Integration, der aktive BMS-Grenzen meldet.",
+          "pack_capacity_kwh": "Nutzbare Kapazität eines einzelnen Akku-Packs in kWh. Wird mit der Anzahl der Packs multipliziert.",
+          "installed_pv_wp": "Installierte Spitzenleistung der PV-Anlage in Wattpeak. Wird für zukünftige Optimierungen verwendet.",
+          "battery_ac_power_entity": "Sensor für die AC-Leistung der Batterie in Watt. Muss bei Entladung positiv sein.",
+          "pv_entity": "Sensor mit der aktuellen PV-Leistung in Watt. Wird zur Erkennung von Überschuss verwendet.",
+          "additional_battery_charge_entity": "Sensor mit der aktuellen Ladeleistung der zweiten Batterie in Watt (z. B. BYD).",
+          "additional_battery_discharge_entity": "Sensor mit der aktuellen Entladeleistung der zweiten Batterie in Watt.",
+          "wallbox_power_entity": "Sensor mit der aktuellen Ladeleistung der Wallbox in Watt. Verhindert Zendure-Entladung bei aktivem Fahrzeug-Laden.",
+          "pv_forecast_entity": "Solcast- oder anderer PV-Prognosesensor (heutige Erzeugung in kWh). Basis für PV-bewusste Nachtladung.",
+          "pv_daily_yield_entity": "Sensor mit dem tatsächlichen PV-Tagesertrag (kWh). Wird bei Sonnenuntergang gespeichert und als Fallback-Prognose genutzt, wenn kein Solcast-Sensor verfügbar ist.",
+          "additional_battery_soc_entity": "Sensor mit dem Ladezustand der zweiten Batterie in Prozent (z. B. BYD HVS).",
+          "additional_battery_capacity_kwh": "Gesamtkapazität der zweiten Batterie in kWh. Wird für die Nachtlade-Berechnung benötigt. 0 = nicht vorhanden.",
+          "additional_battery_mode_entity": "input_select zur Steuerung des Betriebsmodus der zweiten Batterie (Laden / Automatik / Pause).",
+          "additional_battery_power_entity": "input_number zur Einstellung der Ladeleistung der zweiten Batterie in Watt.",
+          "additional_battery_charge_mode": "Exakter Text-Wert des Lademodus im input_select (z. B. 'Laden'). Muss exakt mit den Optionen übereinstimmen.",
+          "additional_battery_stop_mode": "Exakter Text-Wert des Normalmodus im input_select (z. B. 'Automatik'). Wird nach Abschluss der Nachtladung gesetzt.",
+          "additional_battery_pause_mode": "Exakter Text-Wert des Pause-Modus im input_select (z. B. 'Pause'). Verhindert Entladung während der Zendure-Nachtladung.",
+          "price_export_entity": "Sensor mit Preisprognosedaten für die nächsten Stunden. Ermöglicht Preis-Vorplanung.",
+          "price_now_entity": "Sensor mit dem aktuellen Strompreis (€/kWh). Wird für preisabhängige Entladung genutzt.",
+          "ac_mode_entity": "Select-Entität der Zendure-Integration, die zwischen Laden (INPUT) und Entladen (OUTPUT) umschaltet.",
+          "input_limit_entity": "Number-Entität zur Einstellung der Zendure-Ladeleistung in Watt.",
+          "output_limit_entity": "Number-Entität zur Einstellung der Zendure-Entladeleistung in Watt.",
+          "grid_mode": "Wähle, wie dein Netzverbrauch gemessen wird.",
+          "grid_power_entity": "Ein einzelner Sensor mit positiver Leistung bei Netzbezug und negativer bei Einspeisung.",
+          "grid_import_entity": "Sensor mit aktueller Netzbezugsleistung in Watt.",
+          "grid_export_entity": "Sensor mit aktueller Netzeinspeisung in Watt."
+        }
+      },
+      "reconfigure_grid": {
+        "title": "Netzmessung konfigurieren",
+        "description": "Wähle die Netzsensoren passend zum Modus",
+        "data": {
+          "grid_power_entity": "Netzleistung (Single)",
+          "grid_import_entity": "Netzbezug (Split)",
+          "grid_export_entity": "Netzeinspeisung (Split)"
+        },
+        "data_description": {
+          "grid_power_entity": "Ein einzelner Sensor mit positiver Leistung bei Bezug und negativer bei Einspeisung.",
+          "grid_import_entity": "Sensor mit aktueller Netzbezugsleistung in Watt.",
+          "grid_export_entity": "Sensor mit aktueller Netzeinspeisung in Watt."
+        }
+      }
+    }
+  },
+
+  "entity": {
+    "select": {
+      "ai_mode": {
+        "name": "Betriebsmodus",
+        "state": {
+          "automatic": "Automatik",
+          "summer": "Sommer",
+          "winter": "Winter",
+          "manual": "Manuell"
+        }
+      },
+      "manual_action": {
+        "name": "Manuelle Aktion",
+        "state": {
+          "standby": "Standby",
+          "charge": "Laden",
+          "discharge": "Entladen",
+          "constant_discharge": "Konstante Entladung"
+        }
+      },
+      "season_override": {
+        "name": "Jahreszeit Override",
+        "state": {
+          "auto": "Automatisch",
+          "summer": "Sommer",
+          "winter": "Winter"
+        }
+      }
+    },
+
+    "number": {
+      "battery_packs": { "name": "Anzahl Akku-Packs" },
+      "soc_min": { "name": "SoC Minimum" },
+      "soc_max": { "name": "SoC Maximum" },
+      "max_charge": { "name": "Max. Ladeleistung" },
+      "max_discharge": { "name": "Max. Entladeleistung" },
+      "emergency_charge": { "name": "Notladeleistung" },
+      "emergency_soc": { "name": "Notladung ab SoC" },
+      "very_expensive_threshold": { "name": "Sehr-teuer-Schwelle" },
+      "profit_margin_pct": { "name": "Gewinnmarge (%)" },
+      "peak_factor": { "name": "Peak-Faktor" },
+      "valley_factor": { "name": "Tal-Faktor" },
+      "very_cheap_price": { "name": "Sehr-günstig-Schwelle (€/kWh)" },
+      "daytime_consumption_w": { "name": "Tagesverbrauch (W)" },
+      "nighttime_consumption_w": { "name": "Nachtverbrauch (W)" },
+      "evening_consumption_w": { "name": "Abendverbrauch (W)" },
+      "pv_optimism_factor": { "name": "PV-Optimismus-Faktor" }
+    },
+
+    "switch": {
+      "pv_forecast_enabled": { "name": "PV-Nachtladung" },
+      "wallbox_block_enabled": { "name": "Entladung bei Schnellladen verhindern" }
+    },
+
+    "sensor": {
+      "device_profile": { "name": "Aktives Geräteprofil" },
+      "adaptive_peak_active": { "name": "Adaptiver Peak erkannt" },
+      "price_daily_average": { "name": "Ø Tagespreis" },
+      "current_peak_threshold": { "name": "Aktuelle Peak-Schwelle" },
+      "current_valley_threshold": { "name": "Aktuelle Tal-Schwelle" },
+      "engine_health": {
+        "name": "Engine-Status",
+        "state": {
+          "ok": "System normal",
+          "no_price_data": "Keine Preisdaten verfügbar",
+          "no_current_price": "Kein aktueller Strompreis",
+          "sensor_invalid": "Ungültige Sensordaten"
+        }
+      },
+      "season_mode": {
+        "name": "Erkannter Betriebsmodus",
+        "state": {
+          "winter": "Winterbetrieb",
+          "summer": "Sommerbetrieb",
+          "manual": "Manueller Betrieb"
+        }
+      },
+      "soc_limit_status": {
+        "name": "SoC-Limit Status",
+        "state": {
+          "not_configured": "Kein SoC-Limit Sensor konfiguriert",
+          "no_limit": "Kein Limit aktiv",
+          "upper_limit_active": "Oberes SoC-Limit aktiv (Laden gesperrt)",
+          "lower_limit_active": "Unteres SoC-Limit aktiv (Entladen gesperrt)"
+        }
+      },
+      "fault_level_status": {
+        "name": "Fehlerstatus",
+        "state": {
+          "normal": "Kein Fehler / alles normal",
+          "warning": "Warnung (Gerät läuft weiter)",
+          "error": "Fehler / Schutz aktiv"
+        }
+      },
+      "status": {
+        "name": "Systemstatus",
+        "state": {
+          "init": "Initialisierung",
+          "ok": "OK",
+          "sensor_invalid": "Sensordaten ungültig",
+          "price_invalid": "Preisdaten ungültig"
+        }
+      },
+      "ai_status": {
+        "name": "KI-Status",
+        "state": {
+          "standby": "Bereitschaft",
+          "charge_surplus": "Laden (PV-Überschuss)",
+          "cover_deficit": "Entladen (Hauslast decken)",
+          "expensive_discharge": "Entladen (hoher Strompreis)",
+          "very_expensive_force": "Zwangsentladung (extreme Preise)",
+          "emergency_charge": "Notladung aktiv",
+          "manual": "Manueller Modus"
+        }
+      },
+      "recommendation": {
+        "name": "KI-Empfehlung",
+        "state": {
+          "standby": "Keine Aktion",
+          "charge": "Laden",
+          "discharge": "Entladen",
+          "emergency": "Notladung"
+        }
+      },
+      "decision_reason": {
+        "name": "Entscheidungsgrund",
+        "state": {
+          "standby": "Bereitschaft",
+          "state_idle": "Kein Bedarf erkannt",
+          "state_enter_discharge": "Entladen gestartet (Bedarf erkannt)",
+          "state_discharging": "Entladen aktiv (Hauslastdeckung)",
+          "state_enter_charge": "Laden gestartet (Überschuss erkannt)",
+          "state_charging": "Laden aktiv",
+          "expensive_discharge": "Entladen wegen hohem Strompreis",
+          "very_expensive_force_discharge": "Zwangsentladung wegen extremer Preisspitze",
+          "emergency_latched_charge": "Notladung aktiv (verriegelt)",
+          "soc_min_enforced": "Entladung gestoppt (SoC-Minimum erreicht)",
+          "soc_min_resume_block": "Entladung gesperrt (SoC-Minimum-Hysterese)",
+          "soc_limit_upper": "Laden blockiert (oberes SoC-Limit aktiv)",
+          "soc_limit_lower": "Entladen blockiert (unteres SoC-Limit aktiv)",
+          "manual_mode": "Manueller Modus aktiv",
+          "manual_standby": "Manueller Standby",
+          "manual_charge": "Manuelles Laden",
+          "manual_discharge": "Manuelles Entladen",
+          "manual_constant_discharge": "Konstante Entladung aktiv",
+          "manual_idle": "Manuelle Bereitschaft",
+          "idle": "Bereit",
+          "adaptive_peak_discharge": "Entladen wegen Preisspitze",
+          "planning_latest_start": "Laden (Planung: spätester Startpunkt)",
+          "pv_surplus_charge": "Laden (PV-Überschuss)",
+          "summer_cover_deficit": "Sommer: Entladen (Hauslast decken)",
+          "valley_boost_charge": "Laden (Günstiger Nachtstrom)",
+          "night_charge_go_window": "Nachtladung: Günstiges Fenster aktiv",
+          "night_charge_pause": "Nachtladung: Entladung pausiert",
+          "night_charge_byd_discharging": "Nachtladung: BYD entlädt (Laden gesperrt)",
+          "bridge_reserve_block": "Entladung pausiert (Brückenreserve-Schutz)"
+        }
+      },
+      "next_planned_action": {
+        "name": "Geplante nächste Aktion",
+        "state": {
+          "none": "Keine Aktion geplant",
+          "charge": "Geplantes Laden",
+          "discharge": "Geplante Entladung",
+          "wait": "Warten",
+          "emergency": "Notladung"
+        }
+      },
+      "next_action_time": { "name": "Startzeit nächste Aktion" },
+      "ai_debug": { "name": "KI-Debug" },
+      "house_load": { "name": "Hauslast" },
+      "price_now": { "name": "Aktueller Strompreis" },
+      "avg_charge_price": { "name": "Ø Ladepreis Akku" },
+      "profit_eur": { "name": "Ersparnis / Gewinn (gesamt)" },
+      "profit_today_eur": { "name": "Gewinn heute" },
+      "night_break_even_price": { "name": "Nacht Break-Even Preis" },
+      "night_assessment_projected_at_5": { "name": "Nacht Energie bei 05:00" },
+      "night_assessment_battery_at_18": { "name": "Nacht Energie bei 18:00" },
+      "night_assessment_charge_needed_kwh": { "name": "Nacht Ladebedarf" },
+      "night_charge_status": {
+        "name": "Nachtladung Status",
+        "state": {
+          "charging": "Aktiv – BYD lädt",
+          "goal_reached": "Ziel erreicht",
+          "no_need": "Kein Ladebedarf",
+          "discharge_paused": "Entladung pausiert",
+          "inactive": "Inaktiv"
+        }
+      },
+      "night_charge_pv_kwh": { "name": "Nachtladung PV-Prognose" },
+      "night_charge_byd_target_soc": { "name": "Nachtladung BYD Ziel-SoC" },
+      "night_charge_byd_kwh": { "name": "Nachtladung BYD Ladung" },
+      "night_charge_zendure_target_soc": { "name": "Nachtladung Zendure Ziel-SoC" },
+      "night_charge_zendure_kwh": { "name": "Nachtladung Zendure Ladung" },
+      "total_available_kwh": { "name": "Verfügbare Energie (Gesamt)" }
+    }
+  }
+}

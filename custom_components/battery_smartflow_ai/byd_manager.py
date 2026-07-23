@@ -136,6 +136,22 @@ class BydNightChargeManager:
     # Nachtlade-Zustandsmaschine
     # --------------------------------------------------
 
+    async def async_reset(self) -> None:
+        """Erzwingt Sicherheitsstopp unabhängig vom Nachtfenster (z.B. bei Switch-off).
+
+        Gleiches Verhalten wie der Fenster-Sicherheitsstopp in update(), aber
+        von außen (Coordinator) auslösbar statt an das GO-Fenster gebunden.
+        """
+        self._persist.pop("night_soc_snapshot", None)
+        if self.night_active:
+            _LOGGER.info("SmartFlow Nachtladen: PV-Nachtladung deaktiviert – BYD → %s", self._stop_mode)
+            await self._set_mode(self._stop_mode)
+            self.night_active = False
+        if self.discharge_paused:
+            _LOGGER.info("SmartFlow Nachtladen: PV-Nachtladung deaktiviert – Entladepause aufheben → %s", self._stop_mode)
+            await self._set_mode(self._stop_mode)
+            self.discharge_paused = False
+
     async def update(
         self,
         ctx: DecisionContext,

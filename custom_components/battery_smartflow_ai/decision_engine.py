@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import statistics
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -88,6 +87,9 @@ class DecisionContext:
     evening_consumption_w: float = 500.0      # Abendverbrauch 18–24 Uhr in W (v4.3, ersetzt bridge_kwh×2)
     night_charge_required: bool = False   # Ladebedarf ≥ 0.2 kWh (aus letztem BYD-Zyklus)
     night_charge_active: bool = False     # BYD lädt gerade aktiv (aus letztem BYD-Zyklus)
+    grid_protect_active: bool = False     # teures Peak-Fenster 15–20 (Modul 3)
+    cover_cap_w: float = 0.0              # Entlade-Cap für Eigenverbrauch (0 = nicht decken / Reserve sparen)
+    cover_breakeven: Optional[float] = None  # Decken lohnt erst über diesem Preis (€/kWh)
 
 
 @dataclass(frozen=True)
@@ -145,6 +147,58 @@ class EmergencyRule(BaseRule):
                 charge_w=min(ctx.max_charge_w, ctx.emergency_charge_w),
                 discharge_w=0.0,
                 reason="emergency_latched_charge",
+            )
+        return None
+
+
+class SelfConsumptionRule(BaseRule):
+    """Eigenverbrauch / Netzbezugsschutz (EnWG 14a Modul 3).
+
+    Grundsatz: der Akku deckt die Hauslast statt Netzbezug, wann immer es
+    wirtschaftlich ist (price_now über Break-Even). Die Energie-Budgetierung
+    passiert im Coordinator und steckt in ``cover_cap_w``:
+
+    - Vor dem teuren Fenster (15–20): nur Energie über der Peak-Reserve nutzen
+      (sonst ``cover_cap_w = 0`` → aufsparen), Cap = max_discharge.
+    - Im Fenster: Cap = volle Geräteleistung; reicht die Energie nicht für den
+      Rest des Fensters, ist der Cap so gedeckelt, dass sie bis 20 Uhr reicht.
+    - Nach dem Fenster: frei decken bis soc_min.
+
+    Höchste Priorität nach EmergencyRule (Akkuschutz bleibt vorrangig).
+    """
+
+    def evaluate(self, engine, ctx):
+        if ctx.cover_cap_w <= 0.0:
+            return None
+        if ctx.ai_mode == "manual":
+            return None
+        # Schnellladen der Wallbox / BYD-Ladung kann der Akku nicht decken bzw.
+        # würde einen Energiekreis erzeugen → nicht eingreifen.
+        if engine._wallbox_blocks_discharge(ctx) or engine._byd_blocks_discharge(ctx):
+            return None
+        # Nacht-Brückenreserve (00–05) hat Vorrang.
+        if engine._bridge_reserve_blocks_discharge(ctx):
+            return None
+        # Bereits Überschuss/Export → kein Netzbezug, nichts zu decken.
+        if engine._is_real_export(ctx):
+            return None
+        if ctx.soc <= ctx.soc_min:
+            return None
+        # Wirtschaftlichkeit: nur decken, wenn Preis über Break-Even liegt.
+        if (
+            ctx.cover_breakeven is not None
+            and ctx.price_now is not None
+            and ctx.price_now <= ctx.cover_breakeven
+        ):
+            return None
+        discharge_w = engine._delta_discharge_capped(ctx, ctx.cover_cap_w)
+        if discharge_w > 0:
+            return DecisionResult(
+                action="discharge",
+                ac_mode="output",
+                charge_w=0.0,
+                discharge_w=discharge_w,
+                reason="grid_protect_discharge" if ctx.grid_protect_active else "self_consumption_discharge",
             )
         return None
 
@@ -370,16 +424,19 @@ class NightWindowController:
         battery_usable = z_usable + byd_usable
 
         projected_at_5 = battery_usable - ctx.nighttime_kwh
-        pv_surplus = max(
-            0.0,
-            pv_forecast * ctx.pv_optimism_factor - ctx.pv_self_consumption_kwh,
-        )
+        # Punkt 1: PV-Netto über den Tag (08–18). Positiv = PV lädt den Akku,
+        # negativ = der Akku deckt den Tag-Selbstverbrauch, den PV nicht trägt
+        # (Modul 3: tagsüber Akku statt Netz). Früher wurde nur der Überschuss
+        # gezählt (max(0, …)) → Nachtladung zu knapp, sobald tagsüber entladen wird.
+        pv_net = pv_forecast * ctx.pv_optimism_factor - ctx.pv_self_consumption_kwh
         evening_need   = ctx.evening_consumption_w / 1000.0 * 6.0  # 18–24 Uhr = 6h
         bridge_covered = projected_at_5 >= ctx.bridge_kwh
 
         if bridge_covered:
             battery_at_08 = projected_at_5 - ctx.bridge_kwh
-            battery_at_18 = min(total_capacity, battery_at_08 + pv_surplus)
+            # battery_at_18 darf negativ werden = Akku tagsüber leergelaufen →
+            # zwingt entsprechend mehr Nachtladung (charge_needed unten).
+            battery_at_18 = min(total_capacity, battery_at_08 + pv_net)
             evening_covered = battery_at_18 >= evening_need
         else:
             battery_at_18   = 0.0
@@ -402,7 +459,7 @@ class NightWindowController:
             charge_needed_kwh=charge_needed,
             z_charge_kwh=z_charge,
             projected_at_5=projected_at_5,
-            battery_at_18=battery_at_18,
+            battery_at_18=max(0.0, battery_at_18),  # Anzeige: kein negativer Energiewert
             evening_need=evening_need,
         )
 
@@ -650,6 +707,7 @@ class DecisionEngine:
         self._night_controller = night_controller
         self._rules = [
             EmergencyRule(),
+            SelfConsumptionRule(),
             PeakRule(),
             PlanningRule(),
             PvRule(),
@@ -670,8 +728,9 @@ class DecisionEngine:
         return net < -self._EXPORT_THRESHOLD_W
 
     def _byd_blocks_discharge(self, ctx: DecisionContext) -> bool:
-        """BYD lädt → Zendure darf nicht entladen (Energie-Loop verhindern)."""
-        return float(ctx.additional_battery_charge_w or 0.0) > 0.0
+        """BYD lädt → Zendure darf nicht entladen (Energie-Loop verhindern).
+        Schwellwert 30 W filtert Restwerte beim Pausieren und Messrauschen heraus."""
+        return float(ctx.additional_battery_charge_w or 0.0) > 30.0
 
     def _byd_blocks_charge(self, ctx: DecisionContext) -> bool:
         """BYD entlädt → Zendure darf nicht laden (Energie-Loop verhindern).
@@ -731,6 +790,12 @@ class DecisionEngine:
 
     def _delta_discharge(self, ctx: DecisionContext) -> float:
         return PowerController.delta_discharge(self._to_power_ctx(ctx))
+
+    def _delta_discharge_capped(self, ctx: DecisionContext, cap_w: float) -> float:
+        """Wie _delta_discharge, aber mit eigenem Entlade-Cap (Eigenverbrauchs-Budget)."""
+        pc = self._to_power_ctx(ctx)
+        pc.max_discharge_w = float(cap_w)
+        return PowerController.delta_discharge(pc)
 
     def _delta_charge(self, ctx: DecisionContext) -> float:
         return PowerController.delta_charge(self._to_power_ctx(ctx))
@@ -933,23 +998,26 @@ class DecisionEngine:
         ]
 
         if future_prices:
-            energy_per_slot = charge_power_kw * 0.25  # 15 Minuten
+            # Slot-Dauer pro Punkt aus end-start ableiten (1h bei SmartFlow-Reihe,
+            # 15min bei Tibber) statt fixer Annahme. Günstigste Slots aufsummieren
+            # bis required_kwh gedeckt ist.
+            sorted_slots = sorted(future_prices, key=lambda p: p.price)
+            accumulated_kwh = 0.0
+            cheapest_slots: List[PricePoint] = []
+            for slot in sorted_slots:
+                slot_hours = max(0.0, (slot.end - slot.start).total_seconds() / 3600.0)
+                cheapest_slots.append(slot)
+                accumulated_kwh += charge_power_kw * slot_hours
+                if accumulated_kwh >= required_kwh:
+                    break
 
-            if energy_per_slot > 0:
-                required_slots = max(1, math.ceil(required_kwh / energy_per_slot))
+            if not cheapest_slots:
+                return None
 
-                cheapest_slots = sorted(
-                    future_prices,
-                    key=lambda p: p.price,
-                )[:required_slots]
+            cheapest_prices = [p.price for p in cheapest_slots]
 
-                if not cheapest_slots:
-                    return None
-
-                cheapest_prices = [p.price for p in cheapest_slots]
-
-                if ctx.price_now > max(cheapest_prices):
-                    return None
+            if ctx.price_now > max(cheapest_prices):
+                return None
 
         # ------------------------------------------------
         # Latest start trigger

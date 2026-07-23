@@ -162,6 +162,11 @@ SETTING_PROFIT_MARGIN_PCT = "profit_margin_pct"   # Arbitrage/Planung
 
 SETTING_PEAK_FACTOR = "peak_factor"
 
+# Netzbezugsschutz (EnWG 14a Modul 3): teures Peak-Fenster, in dem Netzbezug
+# strikt vermieden wird (Akku deckt volle Hauslast bis Gerätemaximum).
+SETTING_PEAK_PROTECT_START = "peak_protect_start_hour"   # Stunde inkl. (Default 15)
+SETTING_PEAK_PROTECT_END   = "peak_protect_end_hour"     # Stunde exkl. (Default 20)
+
 # ==================================================
 # Defaults
 # ==================================================
@@ -182,6 +187,9 @@ DEFAULT_EMERGENCY_CHARGE = 1200
 DEFAULT_PROFIT_MARGIN_PCT = 27.0
 
 DEFAULT_PEAK_FACTOR = 1.35
+
+DEFAULT_PEAK_PROTECT_START = 15   # 15:00
+DEFAULT_PEAK_PROTECT_END   = 20   # 20:00 (start == end → Schutz deaktiviert)
 
 # ==================================================
 # Status / Enum values (internal)

@@ -1,0 +1,360 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Battery SmartFlow AI",
+        "description": "Select the required sensors",
+        "data": {
+          "device_profile": "Device profile",
+          "soc_entity": "Battery SoC sensor",
+          "soc_limit_entity": "SoC limit status (optional)",
+          "pack_capacity_kwh": "Capacity per battery pack (kWh)",
+          "installed_pv_wp": "Installed PV power (Wp, optional)",
+          "battery_ac_power_entity": "Battery AC power sensor (W)",
+          "pv_entity": "PV power sensor",
+          "additional_battery_charge_entity": "Second battery charge power sensor (optional)",
+          "additional_battery_discharge_entity": "Second battery discharge power sensor (optional)",
+          "wallbox_power_entity": "Wallbox power sensor (optional)",
+          "pv_forecast_entity": "PV forecast sensor (optional)",
+          "pv_daily_yield_entity": "PV daily yield sensor (optional)",
+          "additional_battery_soc_entity": "Second battery SoC sensor (optional)",
+          "additional_battery_capacity_kwh": "Second battery capacity (kWh)",
+          "additional_battery_mode_entity": "Second battery mode input_select (optional)",
+          "additional_battery_power_entity": "Second battery power input_number (optional)",
+          "additional_battery_charge_mode": "Charge mode string (e.g. 'Laden')",
+          "additional_battery_stop_mode": "Stop mode string (e.g. 'Automatik')",
+          "additional_battery_pause_mode": "Pause mode string (e.g. 'Pause')",
+          "price_export_entity": "Price forecast (e.g. Tibber / EPEX)",
+          "price_now_entity": "Current electricity price",
+          "ac_mode_entity": "Zendure AC mode",
+          "input_limit_entity": "Zendure charge power",
+          "output_limit_entity": "Zendure discharge power",
+          "grid_mode": "Grid measurement",
+          "grid_power_entity": "Grid power (single)",
+          "grid_import_entity": "Grid import (split)",
+          "grid_export_entity": "Grid export (split)"
+        },
+        "data_description": {
+          "device_profile": "Select the appropriate device profile for your Zendure system. Control parameters are adjusted automatically.",
+          "soc_entity": "Sensor providing the current battery State of Charge in percent.",
+          "soc_limit_entity": "Optional status sensor detecting active BMS limits from the Zendure integration.",
+          "pack_capacity_kwh": "Usable capacity of a single battery pack in kWh. Multiplied by the number of installed packs.",
+          "installed_pv_wp": "Installed peak power of the PV system in Wattpeak. Used for future optimizations.",
+          "battery_ac_power_entity": "Sensor providing battery AC power in watts. Value must be positive during discharge.",
+          "pv_entity": "Sensor providing current PV power in watts. Used to detect surplus.",
+          "additional_battery_charge_entity": "Sensor providing current charge power of the second battery in watts (e.g. BYD).",
+          "additional_battery_discharge_entity": "Sensor providing current discharge power of the second battery in watts.",
+          "wallbox_power_entity": "Sensor providing current wallbox charge power in watts. Prevents Zendure discharge during active vehicle charging.",
+          "pv_forecast_entity": "Solcast or other PV forecast sensor (today's generation in kWh). Basis for PV-aware night charging.",
+          "pv_daily_yield_entity": "Sensor providing the actual daily PV yield (kWh). Stored at sunset and used as fallback forecast when no Solcast sensor is available.",
+          "additional_battery_soc_entity": "Sensor providing the State of Charge of the second battery in percent (e.g. BYD HVS).",
+          "additional_battery_capacity_kwh": "Total capacity of the second battery in kWh. Required for night charge calculations. 0 = not present.",
+          "additional_battery_mode_entity": "input_select to control the operating mode of the second battery (charge / automatic / pause).",
+          "additional_battery_power_entity": "input_number to set the charge power of the second battery in watts.",
+          "additional_battery_charge_mode": "Exact text value of the charge mode in the input_select (e.g. 'Laden'). Must match exactly.",
+          "additional_battery_stop_mode": "Exact text value of the normal mode in the input_select (e.g. 'Automatik'). Set after night charging completes.",
+          "additional_battery_pause_mode": "Exact text value of the pause mode in the input_select (e.g. 'Pause'). Prevents discharge during Zendure night charging.",
+          "price_export_entity": "Sensor providing price forecast data for upcoming hours. Enables intelligent charge planning.",
+          "price_now_entity": "Sensor providing the current electricity price (€/kWh). Enables price-based discharge.",
+          "ac_mode_entity": "Select entity from the Zendure integration switching between INPUT and OUTPUT mode.",
+          "input_limit_entity": "Number entity to set Zendure charge power in watts.",
+          "output_limit_entity": "Number entity to set Zendure discharge power in watts.",
+          "grid_mode": "Determines how grid import and export are measured.",
+          "grid_power_entity": "Combined grid sensor (positive = import, negative = export).",
+          "grid_import_entity": "Grid import sensor in watts (split mode).",
+          "grid_export_entity": "Grid export sensor in watts (split mode)."
+        }
+      },
+      "grid": {
+        "title": "Configure grid measurement",
+        "description": "Select grid sensors according to the selected mode",
+        "data": {
+          "grid_power_entity": "Grid power (single)",
+          "grid_import_entity": "Grid import (split)",
+          "grid_export_entity": "Grid export (split)"
+        },
+        "data_description": {
+          "grid_power_entity": "Single sensor: positive = import, negative = export.",
+          "grid_import_entity": "Sensor providing current grid import power in watts.",
+          "grid_export_entity": "Sensor providing current grid export power in watts."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Battery SmartFlow AI",
+        "description": "Adjust the selected sensors",
+        "data": {
+          "device_profile": "Device profile",
+          "soc_entity": "Battery SoC sensor",
+          "soc_limit_entity": "SoC limit status (optional)",
+          "pack_capacity_kwh": "Capacity per battery pack (kWh)",
+          "installed_pv_wp": "Installed PV power (Wp, optional)",
+          "battery_ac_power_entity": "Battery AC power sensor (W)",
+          "pv_entity": "PV power sensor",
+          "additional_battery_charge_entity": "Second battery charge power sensor (optional)",
+          "additional_battery_discharge_entity": "Second battery discharge power sensor (optional)",
+          "wallbox_power_entity": "Wallbox power sensor (optional)",
+          "pv_forecast_entity": "PV forecast sensor (optional)",
+          "pv_daily_yield_entity": "PV daily yield sensor (optional)",
+          "additional_battery_soc_entity": "Second battery SoC sensor (optional)",
+          "additional_battery_capacity_kwh": "Second battery capacity (kWh)",
+          "additional_battery_mode_entity": "Second battery mode input_select (optional)",
+          "additional_battery_power_entity": "Second battery power input_number (optional)",
+          "additional_battery_charge_mode": "Charge mode string (e.g. 'Laden')",
+          "additional_battery_stop_mode": "Stop mode string (e.g. 'Automatik')",
+          "additional_battery_pause_mode": "Pause mode string (e.g. 'Pause')",
+          "price_export_entity": "Price forecast (e.g. Tibber / EPEX)",
+          "price_now_entity": "Current electricity price",
+          "ac_mode_entity": "Zendure AC mode",
+          "input_limit_entity": "Zendure charge power",
+          "output_limit_entity": "Zendure discharge power",
+          "grid_mode": "Grid measurement",
+          "grid_power_entity": "Grid power (single)",
+          "grid_import_entity": "Grid import (split)",
+          "grid_export_entity": "Grid export (split)"
+        },
+        "data_description": {
+          "device_profile": "Select the appropriate device profile for your Zendure system. The profile contains optimized control parameters.",
+          "soc_entity": "Sensor providing the current battery State of Charge in percent. Central basis for all decisions.",
+          "soc_limit_entity": "Optional sensor from the Zendure integration indicating active BMS limits.",
+          "pack_capacity_kwh": "Usable capacity of a single battery pack in kWh. Multiplied by the number of installed packs.",
+          "installed_pv_wp": "Installed peak power of the PV system in Wattpeak. Used for future optimizations.",
+          "battery_ac_power_entity": "Sensor providing battery AC power in watts. Value must be positive during discharge.",
+          "pv_entity": "Sensor providing current PV power in watts. Used to detect surplus.",
+          "additional_battery_charge_entity": "Sensor providing current charge power of the second battery in watts (e.g. BYD).",
+          "additional_battery_discharge_entity": "Sensor providing current discharge power of the second battery in watts.",
+          "wallbox_power_entity": "Sensor providing current wallbox charge power in watts. Prevents Zendure discharge during active vehicle charging.",
+          "pv_forecast_entity": "Solcast or other PV forecast sensor (today's generation in kWh). Basis for PV-aware night charging.",
+          "pv_daily_yield_entity": "Sensor providing the actual daily PV yield (kWh). Stored at sunset and used as fallback forecast when no Solcast sensor is available.",
+          "additional_battery_soc_entity": "Sensor providing the State of Charge of the second battery in percent (e.g. BYD HVS).",
+          "additional_battery_capacity_kwh": "Total capacity of the second battery in kWh. Required for night charge calculations. 0 = not present.",
+          "additional_battery_mode_entity": "input_select to control the operating mode of the second battery (charge / automatic / pause).",
+          "additional_battery_power_entity": "input_number to set the charge power of the second battery in watts.",
+          "additional_battery_charge_mode": "Exact text value of the charge mode in the input_select (e.g. 'Laden'). Must match exactly.",
+          "additional_battery_stop_mode": "Exact text value of the normal mode in the input_select (e.g. 'Automatik'). Set after night charging completes.",
+          "additional_battery_pause_mode": "Exact text value of the pause mode in the input_select (e.g. 'Pause'). Prevents discharge during Zendure night charging.",
+          "price_export_entity": "Sensor providing price forecast data for upcoming hours. Enables intelligent charge planning.",
+          "price_now_entity": "Sensor providing the current electricity price (€/kWh). Enables price-based discharge.",
+          "ac_mode_entity": "Select entity from the Zendure integration switching between INPUT and OUTPUT mode.",
+          "input_limit_entity": "Number entity to set Zendure charge power in watts.",
+          "output_limit_entity": "Number entity to set Zendure discharge power in watts.",
+          "grid_mode": "Determines how grid import and export are measured.",
+          "grid_power_entity": "Combined grid sensor (positive = import, negative = export).",
+          "grid_import_entity": "Grid import sensor in watts (split mode).",
+          "grid_export_entity": "Grid export sensor in watts (split mode)."
+        }
+      },
+      "reconfigure_grid": {
+        "title": "Configure grid measurement",
+        "description": "Select grid sensors according to the selected mode",
+        "data": {
+          "grid_power_entity": "Grid power (single)",
+          "grid_import_entity": "Grid import (split)",
+          "grid_export_entity": "Grid export (split)"
+        },
+        "data_description": {
+          "grid_power_entity": "Single sensor: positive = import, negative = export.",
+          "grid_import_entity": "Sensor providing current grid import power in watts.",
+          "grid_export_entity": "Sensor providing current grid export power in watts."
+        }
+      }
+    }
+  },
+
+  "entity": {
+    "select": {
+      "ai_mode": {
+        "name": "Operating mode",
+        "state": {
+          "automatic": "Automatic",
+          "summer": "Summer",
+          "winter": "Winter",
+          "manual": "Manual"
+        }
+      },
+      "manual_action": {
+        "name": "Manual action",
+        "state": {
+          "standby": "Standby",
+          "charge": "Charge",
+          "discharge": "Discharge",
+          "constant_discharge": "Constant discharge"
+        }
+      },
+      "season_override": {
+        "name": "Season override",
+        "state": {
+          "auto": "Automatic",
+          "summer": "Summer",
+          "winter": "Winter"
+        }
+      }
+    },
+
+    "number": {
+      "battery_packs": { "name": "Number of battery packs" },
+      "soc_min": { "name": "SoC minimum" },
+      "soc_max": { "name": "SoC maximum" },
+      "max_charge": { "name": "Max. charge power" },
+      "max_discharge": { "name": "Max. discharge power" },
+      "emergency_charge": { "name": "Emergency charge power" },
+      "emergency_soc": { "name": "Emergency charge from SoC" },
+      "very_expensive_threshold": { "name": "Very expensive threshold" },
+      "profit_margin_pct": { "name": "Profit margin (%)" },
+      "peak_factor": { "name": "Peak factor" },
+      "valley_factor": { "name": "Valley factor" },
+      "very_cheap_price": { "name": "Very cheap price threshold (€/kWh)" },
+      "daytime_consumption_w": { "name": "Daytime consumption (W)" },
+      "nighttime_consumption_w": { "name": "Nighttime consumption (W)" },
+      "evening_consumption_w": { "name": "Evening consumption (W)" },
+      "pv_optimism_factor": { "name": "PV optimism factor" }
+    },
+
+    "switch": {
+      "pv_forecast_enabled": { "name": "PV night charging" },
+      "wallbox_block_enabled": { "name": "Block discharge during fast charging" }
+    },
+
+    "sensor": {
+      "device_profile": { "name": "Active device profile" },
+      "adaptive_peak_active": { "name": "Adaptive peak detected" },
+      "price_daily_average": { "name": "Daily average price" },
+      "current_peak_threshold": { "name": "Current peak threshold" },
+      "current_valley_threshold": { "name": "Current valley threshold" },
+      "engine_health": {
+        "name": "Engine status",
+        "state": {
+          "ok": "System normal",
+          "no_price_data": "No price data available",
+          "no_current_price": "No current price",
+          "sensor_invalid": "Invalid sensor data"
+        }
+      },
+      "season_mode": {
+        "name": "Detected operating mode",
+        "state": {
+          "winter": "Winter mode",
+          "summer": "Summer mode",
+          "manual": "Manual mode"
+        }
+      },
+      "soc_limit_status": {
+        "name": "SoC limit status",
+        "state": {
+          "not_configured": "No SoC limit sensor configured",
+          "no_limit": "No limit active",
+          "upper_limit_active": "Upper SoC limit active (charging blocked)",
+          "lower_limit_active": "Lower SoC limit active (discharging blocked)"
+        }
+      },
+      "fault_level_status": {
+        "name": "Fault status",
+        "state": {
+          "normal": "No fault / normal operation",
+          "warning": "Warning (device continues running)",
+          "error": "Error / protection active"
+        }
+      },
+      "status": {
+        "name": "System status",
+        "state": {
+          "init": "Initialization",
+          "ok": "OK",
+          "sensor_invalid": "Invalid sensor data",
+          "price_invalid": "Invalid price data"
+        }
+      },
+      "ai_status": {
+        "name": "AI status",
+        "state": {
+          "standby": "Standby",
+          "charge_surplus": "Charging (PV surplus)",
+          "cover_deficit": "Discharging (covering house load)",
+          "expensive_discharge": "Discharging (high price)",
+          "very_expensive_force": "Forced discharge (extreme prices)",
+          "emergency_charge": "Emergency charging active",
+          "manual": "Manual mode"
+        }
+      },
+      "recommendation": {
+        "name": "AI recommendation",
+        "state": {
+          "standby": "No action",
+          "charge": "Charge",
+          "discharge": "Discharge",
+          "emergency": "Emergency charge"
+        }
+      },
+      "decision_reason": {
+        "name": "Decision reason",
+        "state": {
+          "standby": "Standby",
+          "state_idle": "No demand detected",
+          "state_enter_discharge": "Discharge started (demand detected)",
+          "state_discharging": "Discharging active (covering house load)",
+          "state_enter_charge": "Charging started (surplus detected)",
+          "state_charging": "Charging active",
+          "expensive_discharge": "Discharging due to high electricity price",
+          "very_expensive_force_discharge": "Forced discharge due to extreme price spike",
+          "emergency_latched_charge": "Emergency charge active (latched)",
+          "soc_min_enforced": "Discharge stopped (SoC minimum reached)",
+          "soc_min_resume_block": "Discharge blocked (SoC minimum hysteresis)",
+          "soc_limit_upper": "Charging blocked (upper SoC limit active)",
+          "soc_limit_lower": "Discharging blocked (lower SoC limit active)",
+          "manual_mode": "Manual mode active",
+          "manual_standby": "Manual standby",
+          "manual_charge": "Manual charging",
+          "manual_discharge": "Manual discharging",
+          "manual_constant_discharge": "Manual: constant discharge",
+          "manual_idle": "Manual idle",
+          "idle": "Ready",
+          "adaptive_peak_discharge": "Discharging due to price peak",
+          "planning_latest_start": "Charging (planning: latest start point)",
+          "pv_surplus_charge": "Charging (PV surplus)",
+          "summer_cover_deficit": "Summer: discharging (covering house load)",
+          "valley_boost_charge": "Charging (cheap night power)",
+          "night_charge_go_window": "Night charge: cheap window active",
+          "night_charge_pause": "Night charge: discharge paused",
+          "night_charge_byd_discharging": "Night charge: BYD discharging (charging blocked)",
+          "bridge_reserve_block": "Discharge paused (bridge reserve protection)"
+        }
+      },
+      "next_planned_action": {
+        "name": "Next planned action",
+        "state": {
+          "none": "No action planned",
+          "charge": "Planned charging",
+          "discharge": "Planned discharge",
+          "wait": "Waiting",
+          "emergency": "Emergency charge"
+        }
+      },
+      "next_action_time": { "name": "Next action start time" },
+      "ai_debug": { "name": "AI debug" },
+      "house_load": { "name": "House load" },
+      "price_now": { "name": "Current electricity price" },
+      "avg_charge_price": { "name": "Average battery charge price" },
+      "profit_eur": { "name": "Savings / profit (total)" },
+      "profit_today_eur": { "name": "Profit today" },
+      "night_break_even_price": { "name": "Night break-even price" },
+      "night_assessment_projected_at_5": { "name": "Night energy at 05:00" },
+      "night_assessment_battery_at_18": { "name": "Night energy at 18:00" },
+      "night_assessment_charge_needed_kwh": { "name": "Night charge needed" },
+      "night_charge_status": {
+        "name": "Night charge status",
+        "state": {
+          "charging": "Active – BYD charging",
+          "goal_reached": "Goal reached",
+          "no_need": "No charge needed",
+          "discharge_paused": "Discharge paused",
+          "inactive": "Inactive"
+        }
+      },
+      "night_charge_pv_kwh": { "name": "Night charge PV forecast" },
+      "night_charge_byd_target_soc": { "name": "Night charge BYD target SoC" },
+      "night_charge_byd_kwh": { "name": "Night charge BYD energy" },
+      "night_charge_zendure_target_soc": { "name": "Night charge Zendure target SoC" },
+      "night_charge_zendure_kwh": { "name": "Night charge Zendure energy" },
+      "total_available_kwh": { "name": "Total available energy" }
+    }
+  }
+}
